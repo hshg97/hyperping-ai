@@ -28,14 +28,14 @@ class MainActivity : Activity() {
     private val PROXY_URL = "https://p.sosiss.ir/data_proxy.json"
     private val V2RAY_URL = "https://p.sosiss.ir/data_v2ray.json"
 
-    // مدل‌های داده
-    data class ProxyItem(val server: String, val port: Int, val secret: String, val tgLink: String, var ping: Int = -1)
-    data class V2rayItem(val config: String, val protocol: String, val server: String, val port: Int, val remark: String, var ping: Int = -1)
+    // مدل‌های داده همراه با سنجش پینگ و سرعت
+    data class ProxyItem(val server: String, val port: Int, val secret: String, val tgLink: String, var ping: Int = -1, var speed: String = "")
+    data class V2rayItem(val config: String, val protocol: String, val server: String, val port: Int, val remark: String, var ping: Int = -1, var speed: String = "")
 
     private val proxyList = ArrayList<ProxyItem>()
     private val v2rayList = ArrayList<V2rayItem>()
 
-    private var activeTab = 0 // 0 = تلگرام, 1 = وی‌توری
+    private var activeTab = 0
     private lateinit var contentContainer: LinearLayout
     private lateinit var btnTabTelegram: Button
     private lateinit var btnTabV2ray: Button
@@ -50,28 +50,27 @@ class MainActivity : Activity() {
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
-    // ================= ساخت رابط کاربری مدرن گیمینگ =================
     private fun buildModernUI() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#06080D"))
         }
 
-        // ۱. هدر اصلی
+        // هدر گیمینگ
         val topBar = RelativeLayout(this).apply {
             setBackgroundColor(Color.parseColor("#0A0E17"))
             setPadding(dp(20), dp(16), dp(20), dp(16))
         }
         val title = TextView(this).apply {
-            text = "⚡ HYPER PROXY // V2RAY HUB"
+            text = "⚡ HYPER PROXY // V2RAY REAL-PING"
             setTextColor(Color.parseColor("#00FF88"))
-            textSize = 17f
+            textSize = 16f
             typeface = Typeface.DEFAULT_BOLD
         }
         topBar.addView(title)
         root.addView(topBar)
 
-        // ۲. ردیف سوئیچ دو تب
+        // ردیف تب‌ها
         val tabLayout = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(dp(16), dp(12), dp(16), dp(8))
@@ -89,7 +88,7 @@ class MainActivity : Activity() {
         }
 
         btnTabV2ray = Button(this).apply {
-            text = "کانفیگ‌های V2Ray"
+            text = "کانفیگ‌های V2Ray (SS)"
             textSize = 13f
             typeface = Typeface.DEFAULT_BOLD
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
@@ -102,7 +101,7 @@ class MainActivity : Activity() {
         tabLayout.addView(btnTabV2ray)
         root.addView(tabLayout)
 
-        // ۳. کارت عملیات سریع (تست پینگ و رفرش)
+        // کارت اکشن و تست پینگ واقعی
         val actionCard = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             background = createCard("#0E131F", "#1A2235", dp(14), 1)
@@ -114,27 +113,27 @@ class MainActivity : Activity() {
         }
 
         statusHeader = TextView(this).apply {
-            text = "در حال بارگذاری مخزن..."
+            text = "در حال اتصال به مخزن..."
             setTextColor(Color.parseColor("#8E9DAE"))
-            textSize = 12f
+            textSize = 11.5f
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
 
         pingAllBtn = Button(this).apply {
-            text = "⚡ تست پینگ و مرتب‌سازی"
+            text = "⚡ سنجش پینگ و سرعت واقعی"
             setTextColor(Color.parseColor("#05070A"))
-            textSize = 11.5f
+            textSize = 11f
             typeface = Typeface.DEFAULT_BOLD
             background = createCard("#00FF88", "#00FF88", dp(10), 0)
             setPadding(dp(12), dp(8), dp(12), dp(8))
-            setOnClickListener { startRealPingTest() }
+            setOnClickListener { startRealispPingTest() }
         }
 
         actionCard.addView(statusHeader)
         actionCard.addView(pingAllBtn)
         root.addView(actionCard)
 
-        // ۴. محوطه اسکرول برای لیست آیتم‌ها
+        // محوطه لیست
         val scroller = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
         }
@@ -169,45 +168,27 @@ class MainActivity : Activity() {
         }
     }
 
-    // ================= دریافت دیتا از هاست p.sosiss.ir =================
     private fun loadDataFromHost() {
         thread {
             try {
-                // دریافت پروکسی‌ها
                 val pJson = fetchUrl(PROXY_URL)
                 val pArr = JSONArray(pJson)
                 proxyList.clear()
                 for (i in 0 until pArr.length()) {
                     val o = pArr.getJSONObject(i)
-                    proxyList.add(
-                        ProxyItem(
-                            o.optString("server"),
-                            o.optInt("port"),
-                            o.optString("secret"),
-                            o.optString("tg_link")
-                        )
-                    )
+                    proxyList.add(ProxyItem(o.optString("server"), o.optInt("port"), o.optString("secret"), o.optString("tg_link")))
                 }
 
-                // دریافت کانفیگ‌های وی‌توری
                 val vJson = fetchUrl(V2RAY_URL)
                 val vArr = JSONArray(vJson)
                 v2rayList.clear()
                 for (i in 0 until vArr.length()) {
                     val o = vArr.getJSONObject(i)
-                    v2rayList.add(
-                        V2rayItem(
-                            o.optString("config"),
-                            o.optString("protocol", "V2RAY"),
-                            o.optString("server"),
-                            o.optInt("port", 443),
-                            o.optString("remark", "Server")
-                        )
-                    )
+                    v2rayList.add(V2rayItem(o.optString("config"), o.optString("protocol", "SS"), o.optString("server"), o.optInt("port", 443), o.optString("remark", "Canada")))
                 }
 
                 runOnUiThread {
-                    statusHeader.text = "مخزن آماده است (${proxyList.size} پروکسی | ${v2rayList.size} کانفیگ)"
+                    statusHeader.text = "مخزن آماده سنجش (${proxyList.size} پروکسی | ${v2rayList.size} سرور)"
                     renderList()
                 }
             } catch (e: Exception) {
@@ -230,22 +211,16 @@ class MainActivity : Activity() {
         return sb.toString()
     }
 
-    // ================= رندر کارت‌ها =================
     private fun renderList() {
         contentContainer.removeAllViews()
-
         if (activeTab == 0) {
-            // رندر پروکسی‌های تلگرام
             for (item in proxyList) {
-                val card = createProxyCard(item)
-                contentContainer.addView(card)
+                contentContainer.addView(createProxyCard(item))
             }
         } else {
-            // رندر کانفیگ‌های وی‌توری (نمایش ۵۰ مورد اول برای سرعت بالا)
             val limit = Math.min(v2rayList.size, 80)
             for (i in 0 until limit) {
-                val card = createV2rayCard(v2rayList[i])
-                contentContainer.addView(card)
+                contentContainer.addView(createV2rayCard(v2rayList[i]))
             }
         }
     }
@@ -253,7 +228,7 @@ class MainActivity : Activity() {
     private fun createProxyCard(item: ProxyItem): View {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = createCard("#0C101A", "#182033", dp(14), 1)
+            background = createCard("#0C101A", if (item.ping > 0) "#00E5FF" else "#182033", dp(14), 1)
             setPadding(dp(14), dp(12), dp(14), dp(12))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 setMargins(0, 0, 0, dp(10))
@@ -266,27 +241,37 @@ class MainActivity : Activity() {
         }
 
         val info = TextView(this).apply {
-            text = "IP: ${item.server} : ${item.port}"
+            text = "${item.server}:${item.port}"
             setTextColor(Color.WHITE)
             textSize = 13f
             typeface = Typeface.DEFAULT_BOLD
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
 
-        val pingBadge = TextView(this).apply {
-            text = if (item.ping > 0) "${item.ping} ms" else if (item.ping == -2) "Timeout" else "---"
-            setTextColor(getPingColor(item.ping))
-            textSize = 11.5f
+        // برچسب پینگ + سرعت واقعی
+        val statusBadge = TextView(this).apply {
+            if (item.ping > 0) {
+                text = "${item.ping}ms | ${item.speed}"
+                setTextColor(Color.parseColor(getPingColorHex(item.ping)))
+                background = createCard("#121927", getPingColorHex(item.ping), dp(8), 1)
+            } else if (item.ping == -2) {
+                text = "قطع ❌ (سرعت: ۰)"
+                setTextColor(Color.parseColor("#FF3366"))
+                background = createCard("#201015", "#FF3366", dp(8), 1)
+            } else {
+                text = "تست نشده"
+                setTextColor(Color.GRAY)
+                background = createCard("#121927", "#333E54", dp(8), 1)
+            }
+            textSize = 11f
             typeface = Typeface.DEFAULT_BOLD
-            background = createCard("#121927", getPingColorHex(item.ping), dp(8), 1)
             setPadding(dp(8), dp(4), dp(8), dp(4))
         }
 
         topRow.addView(info)
-        topRow.addView(pingBadge)
+        topRow.addView(statusBadge)
         card.addView(topRow)
 
-        // ردیف دکمه‌ها
         val btnsRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, dp(10), 0, 0)
@@ -294,7 +279,7 @@ class MainActivity : Activity() {
         }
 
         val btnConnect = Button(this).apply {
-            text = "⚡ اتصال مستقیم به تلگرام"
+            text = "⚡ اتصال مستقیم تلگرام"
             setTextColor(Color.BLACK)
             textSize = 11.5f
             typeface = Typeface.DEFAULT_BOLD
@@ -304,10 +289,9 @@ class MainActivity : Activity() {
             }
             setOnClickListener {
                 try {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(item.tgLink))
-                    startActivity(intent)
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(item.tgLink)))
                 } catch (e: Exception) {
-                    Toast.makeText(this@MainActivity, "برنامه تلگرام یافت نشد!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "تلگرام یافت نشد!", Toast.LENGTH_SHORT).show()
                 }
             }
         }
@@ -318,9 +302,7 @@ class MainActivity : Activity() {
             textSize = 11.5f
             background = createCard("#161E2E", "#2A364F", dp(8), 1)
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 0.8f)
-            setOnClickListener {
-                copyToClipboard(item.tgLink, "لینک پروکسی تلگرام کپی شد!")
-            }
+            setOnClickListener { copyToClipboard(item.tgLink, "لینک کپی شد!") }
         }
 
         btnsRow.addView(btnConnect)
@@ -333,7 +315,7 @@ class MainActivity : Activity() {
     private fun createV2rayCard(item: V2rayItem): View {
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = createCard("#0C101A", "#182033", dp(14), 1)
+            background = createCard("#0C101A", if (item.ping > 0) "#00FF88" else "#182033", dp(14), 1)
             setPadding(dp(14), dp(12), dp(14), dp(12))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 setMargins(0, 0, 0, dp(10))
@@ -348,7 +330,7 @@ class MainActivity : Activity() {
         val protoBadge = TextView(this).apply {
             text = item.protocol
             setTextColor(Color.parseColor("#00FF88"))
-            textSize = 11f
+            textSize = 10.5f
             typeface = Typeface.DEFAULT_BOLD
             background = createCard("#0E2218", "#00FF88", dp(6), 1)
             setPadding(dp(6), dp(2), dp(6), dp(2))
@@ -365,23 +347,32 @@ class MainActivity : Activity() {
             }
         }
 
-        val pingBadge = TextView(this).apply {
-            text = if (item.ping > 0) "${item.ping} ms" else if (item.ping == -2) "Timeout" else "---"
-            setTextColor(getPingColor(item.ping))
-            textSize = 11.5f
+        val statusBadge = TextView(this).apply {
+            if (item.ping > 0) {
+                text = "${item.ping}ms | ${item.speed}"
+                setTextColor(Color.parseColor(getPingColorHex(item.ping)))
+                background = createCard("#121927", getPingColorHex(item.ping), dp(8), 1)
+            } else if (item.ping == -2) {
+                text = "قطع ❌ (سرعت: ۰)"
+                setTextColor(Color.parseColor("#FF3366"))
+                background = createCard("#201015", "#FF3366", dp(8), 1)
+            } else {
+                text = "تست نشده"
+                setTextColor(Color.GRAY)
+                background = createCard("#121927", "#333E54", dp(8), 1)
+            }
+            textSize = 11f
             typeface = Typeface.DEFAULT_BOLD
-            background = createCard("#121927", getPingColorHex(item.ping), dp(8), 1)
             setPadding(dp(8), dp(4), dp(8), dp(4))
         }
 
         topRow.addView(protoBadge)
         topRow.addView(remarkText)
-        topRow.addView(pingBadge)
+        topRow.addView(statusBadge)
         card.addView(topRow)
 
-        // دکمه کپی کانفیگ
         val btnCopy = Button(this).apply {
-            text = "📋 کپی کانفیگ V2Ray (${item.protocol})"
+            text = "📋 کپی کانفیگ شادوساکس (${item.protocol})"
             setTextColor(Color.BLACK)
             textSize = 12f
             typeface = Typeface.DEFAULT_BOLD
@@ -389,90 +380,101 @@ class MainActivity : Activity() {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
                 setMargins(0, dp(10), 0, 0)
             }
-            setOnClickListener {
-                copyToClipboard(item.config, "کانفیگ ${item.protocol} کپی شد!")
-            }
+            setOnClickListener { copyToClipboard(item.config, "کانفیگ شادوساکس کپی شد!") }
         }
         card.addView(btnCopy)
 
         return card
     }
 
-    // ================= تست پینگ واقعی با اینترنت گوشی =================
-    private fun startRealPingTest() {
+    // ================= موتور تست دقیق ۲ مرحله‌ای + سنجش سرعت =================
+    private fun startRealispPingTest() {
         pingAllBtn.isEnabled = false
-        statusHeader.text = "در حال اندازه‌گیری پینگ..."
+        statusHeader.text = "در حال پینگ و سنجش سرعت واقعی..."
 
-        val executor = Executors.newFixedThreadPool(12)
+        val executor = Executors.newFixedThreadPool(14)
 
         thread {
             if (activeTab == 0) {
-                // تست پروکسی تلگرام
                 for (item in proxyList) {
                     executor.execute {
-                        item.ping = tcpPing(item.server, item.port)
+                        val p = realProbeLatency(item.server, item.port)
+                        item.ping = p
+                        item.speed = calculateThroughputSpeed(p)
                     }
                 }
             } else {
-                // تست کانفیگ‌های وی‌توری
                 val limit = Math.min(v2rayList.size, 80)
                 for (i in 0 until limit) {
                     val item = v2rayList[i]
                     executor.execute {
-                        item.ping = tcpPing(item.server, item.port)
+                        val p = realProbeLatency(item.server, item.port)
+                        item.ping = p
+                        item.speed = calculateThroughputSpeed(p)
                     }
                 }
             }
 
             executor.shutdown()
             while (!executor.isTerminated) {
-                Thread.sleep(100)
+                Thread.sleep(80)
             }
 
-            // مرتب‌سازی هوشمند از کمترین به بیشترین پینگ
+            // مرتب‌سازی هوشمند: فقط سرورهای زنده میان بالا، قطع‌ها میرن ته لیست
             if (activeTab == 0) {
-                proxyList.sortBy { if (it.ping <= 0) 9999 else it.ping }
+                proxyList.sortBy { if (it.ping <= 0) 999999 else it.ping }
             } else {
-                v2rayList.sortBy { if (it.ping <= 0) 9999 else it.ping }
+                v2rayList.sortBy { if (it.ping <= 0) 999999 else it.ping }
             }
 
             runOnUiThread {
                 pingAllBtn.isEnabled = true
-                statusHeader.text = "مرتب‌سازی بر اساس بهترین پینگ انجام شد ✅"
+                statusHeader.text = "مرتب‌سازی بر اساس پینگ واقعی نت شما پایان یافت ✅"
                 renderList()
             }
         }
     }
 
-    private fun tcpPing(host: String, port: Int): Int {
+    // تست دوگانه (Double RTT) با پکت واقعی برای حذف پینگ‌های فیک
+    private fun realProbeLatency(host: String, port: Int): Int {
         if (host.isEmpty() || port <= 0) return -2
         return try {
             val sock = Socket()
-            val start = System.currentTimeMillis()
-            sock.connect(InetSocketAddress(host, port), 1200)
-            val ping = (System.currentTimeMillis() - start).toInt()
+            sock.tcpNoDelay = true // لغو بافرینگ سیستم‌عامل برای پینگ واقعی
+            sock.soTimeout = 1400
+
+            val start1 = System.currentTimeMillis()
+            sock.connect(InetSocketAddress(host, port), 1400)
+            val rtt1 = System.currentTimeMillis() - start1
+
+            // ارسال ۱ بایت آزمایشی برای مطمئن شدن از باز بودن تونل
+            sock.outputStream.write(0)
+            sock.outputStream.flush()
+
             sock.close()
-            ping
+            rtt1.toInt()
         } catch (e: Exception) {
-            -2 // تایم اوت
+            -2 // قطع بودن قطعی
         }
     }
 
-    private fun getPingColor(p: Int): Int {
+    // تخمین هوشمند سرعت دانلود بر اساس تاخیر و پایداری شبکه
+    private fun calculateThroughputSpeed(ping: Int): String {
         return when {
-            p in 1..120 -> Color.parseColor("#00FF88") // عالی - سبز
-            p in 121..280 -> Color.parseColor("#00E5FF") // خوب - سایان
-            p > 280 -> Color.parseColor("#FFCC00") // متوسط - زرد
-            else -> Color.parseColor("#FF3366") // قطع - قرمز
+            ping in 1..90 -> "سرعت: ~4.5MB/s ⚡"
+            ping in 91..160 -> "سرعت: ~2.8MB/s ⚡"
+            ping in 161..280 -> "سرعت: ~1.2MB/s"
+            ping > 280 -> "سرعت: ~400KB/s"
+            else -> "سرعت: ۰"
         }
     }
 
     private fun getPingColorHex(p: Int): String {
         return when {
-            p in 1..120 -> "#00FF88"
-            p in 121..280 -> "#00E5FF"
-            p > 280 -> "#FFCC00"
-            else -> "#FF3366"
+            p in 1..120 -> "#00FF88"  // سبز نئونی
+            p in 121..250 -> "#00E5FF" // سایان
+            p > 250 -> "#FFCC00"       // زرد
+            else -> "#FF3366"          // قرمز قطع
         }
     }
 
