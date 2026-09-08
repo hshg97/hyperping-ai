@@ -9,9 +9,8 @@ import android.net.VpnService
 import android.os.Bundle
 import android.view.Gravity
 import android.widget.*
-import androidx.appcompat.app.AppCompatActivity
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : Activity() {
 
     private val VPN_REQUEST_CODE = 1017
     private var isConnected = false
