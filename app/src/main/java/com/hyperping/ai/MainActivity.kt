@@ -13,6 +13,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -100,12 +102,7 @@ fun PasscodeScreen(onSuccess: (String) -> Unit) {
         OutlinedTextField(
             value = code,
             onValueChange = { code = it },
-            singleLine = true,
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedTextColor = Color.White,
-                focusedBorderColor = Color(0xFF00E5FF),
-                unfocusedBorderColor = Color.Gray
-            )
+            singleLine = true
         )
         Spacer(modifier = Modifier.height(16.dp))
 
