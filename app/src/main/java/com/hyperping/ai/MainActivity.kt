@@ -28,13 +28,14 @@ class MainActivity : Activity() {
     private val PROXY_URL = "https://p.sosiss.ir/data_proxy.json"
     private val V2RAY_URL = "https://p.sosiss.ir/data_v2ray.json"
 
-    data class ProxyModel(val server: String, val port: Int, val secret: String, val tgLink: String, var delay: Int = -1, var stateText: String = "آماده تست")
-    data class V2rayModel(val config: String, val protocol: String, val server: String, val port: Int, val remark: String, var delay: Int = -1, var stateText: String = "آماده تست")
+    // مدل‌های داده کاملاً هماهنگ و بدون غلط تایپی
+    data class ProxyModel(val server: String, val port: Int, val secret: String, val tgLink: String, var ping: Int = -1, var stateText: String = "تست نشده")
+    data class V2rayModel(val config: String, val protocol: String, val server: String, val port: Int, val remark: String, var ping: Int = -1, var stateText: String = "تست نشده")
 
     private val proxyItems = ArrayList<ProxyModel>()
     private val v2rayItems = ArrayList<V2rayModel>()
 
-    private var activeTab = 0 // 0 = Telegram (Blue), 1 = Shadowsocks (Purple)
+    private var activeTab = 0 // 0 = تلگرام (آبی), 1 = شادوساکس (بنفش)
     private lateinit var listContainer: LinearLayout
     private lateinit var tabTgBtn: Button
     private lateinit var tabV2Btn: Button
@@ -49,14 +50,12 @@ class MainActivity : Activity() {
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
-    // ================= رابط کاربری شیک با تم آبی و بنفش =================
     private fun initLuxuryUI() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor("#08090C"))
         }
 
-        // نوار بالای صفحه
         val topNav = RelativeLayout(this).apply {
             setBackgroundColor(Color.parseColor("#0E1017"))
             setPadding(dp(20), dp(18), dp(20), dp(18))
@@ -82,7 +81,7 @@ class MainActivity : Activity() {
         topNav.addView(statusPill)
         root.addView(topNav)
 
-        // انتخابگر تب‌ها (ترکیب فیروزه‌ای و بنفش شیک)
+        // انتخابگر تب‌ها
         val tabBox = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             background = createCard("#121520", "#1C2233", dp(12), 1)
@@ -113,7 +112,6 @@ class MainActivity : Activity() {
         tabBox.addView(tabV2Btn)
         root.addView(tabBox)
 
-        // بخش اطلاعات و دکمه تست تفکیک‌شده
         val actionCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = createCard("#11141D", "#1D2333", dp(14), 1)
@@ -130,7 +128,7 @@ class MainActivity : Activity() {
         }
 
         testActionBtn = Button(this).apply {
-            text = "تست وضعیت اتصال"
+            text = "⚡ محاسبه پینگ دقیق ۳ مرحله‌ای"
             setTextColor(Color.parseColor("#08090C"))
             textSize = 12.5f
             typeface = Typeface.DEFAULT_BOLD
@@ -138,14 +136,13 @@ class MainActivity : Activity() {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)).apply {
                 setMargins(0, dp(10), 0, 0)
             }
-            setOnClickListener { runSeparatedDelayTest() }
+            setOnClickListener { runTriplePingTest() }
         }
 
         actionCard.addView(infoStatusText)
         actionCard.addView(testActionBtn)
         root.addView(actionCard)
 
-        // محفظه لیست
         val scroller = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
         }
@@ -168,29 +165,26 @@ class MainActivity : Activity() {
 
     private fun refreshTabUI() {
         if (activeTab == 0) {
-            // تب تلگرام (تم آبی فیروزه‌ای)
             tabTgBtn.setTextColor(Color.WHITE)
             tabTgBtn.background = createCard("#1E293B", "#38BDF8", dp(10), 1)
             tabV2Btn.setTextColor(Color.parseColor("#64748B"))
             tabV2Btn.setBackgroundColor(Color.TRANSPARENT)
 
-            testActionBtn.text = "⚡ تست پینگ واقعی پروکسی‌های تلگرام"
+            testActionBtn.text = "⚡ تست پینگ پروکسی‌های تلگرام (۳ تکرار)"
             testActionBtn.setTextColor(Color.BLACK)
             testActionBtn.background = createCard("#38BDF8", "#38BDF8", dp(10), 0)
         } else {
-            // تب شادوساکس (تم بنفش لوکس و جذاب)
             tabV2Btn.setTextColor(Color.WHITE)
             tabV2Btn.background = createCard("#2D1B4E", "#A855F7", dp(10), 1)
             tabTgBtn.setTextColor(Color.parseColor("#64748B"))
             tabTgBtn.setBackgroundColor(Color.TRANSPARENT)
 
-            testActionBtn.text = "⚡ تست تاخیر و پایداری سرورهای شادوساکس"
+            testActionBtn.text = "⚡ تست پینگ سرورهای شادوساکس (۳ تکرار)"
             testActionBtn.setTextColor(Color.WHITE)
             testActionBtn.background = createCard("#A855F7", "#A855F7", dp(10), 0)
         }
     }
 
-    // ================= دریافت اطلاعات =================
     private fun fetchData() {
         thread {
             try {
@@ -211,12 +205,12 @@ class MainActivity : Activity() {
                 }
 
                 runOnUiThread {
-                    infoStatusText.text = "مخزن فعال: ${proxyItems.size} پروکسی تلگرام | ${v2rayItems.size} سرور شادوساکس"
+                    infoStatusText.text = "مخزن آماده: ${proxyItems.size} پروکسی | ${v2rayItems.size} سرور شادوساکس"
                     renderListView()
                 }
             } catch (e: Exception) {
                 runOnUiThread {
-                    infoStatusText.text = "خطا در دریافت اطلاعات مخزن: " + (e.message ?: "تایم‌اوت")
+                    infoStatusText.text = "خطا در دریافت اطلاعات: " + (e.message ?: "تایم‌اوت")
                 }
             }
         }
@@ -234,7 +228,6 @@ class MainActivity : Activity() {
         return b.toString()
     }
 
-    // ================= رندر کارت‌ها با رنگ‌بندی جدید =================
     private fun renderListView() {
         listContainer.removeAllViews()
 
@@ -360,7 +353,6 @@ class MainActivity : Activity() {
         row.addView(status)
         card.addView(row)
 
-        // دکمه کپی کانفیگ با رنگ بنفش لوکس
         val copyBtn = Button(this).apply {
             text = "کپی کانفیگ شادوساکس"
             setTextColor(Color.WHITE)
@@ -377,40 +369,30 @@ class MainActivity : Activity() {
         return card
     }
 
-    // ================= تست پینگ واقعی و تفکیک‌شده (کاملاً بدون باگ) =================
-    private fun runSeparatedDelayTest() {
+    // ================= تست ۳ مرحله‌ای دقیق مثل پایتون =================
+    private fun runTriplePingTest() {
         testActionBtn.isEnabled = false
-        infoStatusText.text = "در حال اندازه‌گیری پینگ واقعی سرورها..."
+        infoStatusText.text = "در حال ارسال ۳ پینگ متوالی به هر سرور..."
 
         val executor = Executors.newFixedThreadPool(14)
 
         thread {
             if (activeTab == 0) {
-                // تست دقیق پروکسی‌های تلگرام
                 for (item in proxyItems) {
                     executor.execute {
-                        val p = probeSocketLatency(item.server, item.port)
+                        val p = calculateTriplePing(item.server, item.port)
                         item.ping = p
-                        if (p > 0) {
-                            item.stateText = calculateSpeedRating(p)
-                        } else {
-                            item.stateText = "قطع ❌"
-                        }
+                        item.stateText = if (p > 0) calculateSpeedLabel(p) else "قطع ❌"
                     }
                 }
             } else {
-                // تست دقیق سرورهای شادوساکس
                 val count = Math.min(v2rayItems.size, 100)
                 for (i in 0 until count) {
                     val item = v2rayItems[i]
                     executor.execute {
-                        val p = probeSocketLatency(item.server, item.port)
+                        val p = calculateTriplePing(item.server, item.port)
                         item.ping = p
-                        if (p > 0) {
-                            item.stateText = calculateSpeedRating(p)
-                        } else {
-                            item.stateText = "قطع ❌"
-                        }
+                        item.stateText = if (p > 0) calculateSpeedLabel(p) else "قطع ❌"
                     }
                 }
             }
@@ -420,7 +402,7 @@ class MainActivity : Activity() {
                 Thread.sleep(60)
             }
 
-            // مرتب‌سازی هوشمند: سرورهای سالم با کمترین پینگ در بالای لیست
+            // مرتب‌سازی دقیق بر اساس ping (خطای ۴۲۷ قبلی کاملاً فیکس شد)
             if (activeTab == 0) {
                 proxyItems.sortBy { if (it.ping <= 0) 999999 else it.ping }
             } else {
@@ -429,33 +411,45 @@ class MainActivity : Activity() {
 
             runOnUiThread {
                 testActionBtn.isEnabled = true
-                infoStatusText.text = "تست پینگ پایان یافت (مرتب‌شده بر اساس سرعت نت شما)"
+                infoStatusText.text = "پینگ‌گیری ۳ مرحله‌ای تمام شد (سالم‌ها در بالای لیست)"
                 renderListView()
             }
         }
     }
 
-    // متد تست سوکت استاندارد با اعتبارسنجی اتصال پورت
-    private fun probeSocketLatency(host: String, port: Int): Int {
+    // ارسال ۳ پینگ متوالی و محاسبه میانگین زمان رفت و برگشت
+    private fun calculateTriplePing(host: String, port: Int): Int {
         if (host.isEmpty() || port <= 0) return -2
-        return try {
-            val sock = Socket()
-            sock.tcpNoDelay = true
-            val start = System.currentTimeMillis()
-            // پینگ مستقیم سوکت (تایم اوت ۱.۵ ثانیه)
-            sock.connect(InetSocketAddress(host, port), 1500)
-            val delay = (System.currentTimeMillis() - start).toInt()
-            sock.close()
-            delay
-        } catch (e: Exception) {
-            -2 // مسدود بودن پورت در شبکه ایران
+        var totalMs = 0
+        var successCount = 0
+
+        for (attempt in 1..3) {
+            try {
+                val sock = Socket()
+                sock.tcpNoDelay = true
+                val start = System.currentTimeMillis()
+                sock.connect(InetSocketAddress(host, port), 1200)
+                val diff = (System.currentTimeMillis() - start).toInt()
+                sock.close()
+
+                totalMs += diff
+                successCount++
+            } catch (e: Exception) {
+                // تلاش ناموفق
+            }
+        }
+
+        return if (successCount > 0) {
+            totalMs / successCount // میانگین پینگ تست‌های موفق
+        } else {
+            -2 // اگر هر ۳ بار تایم اوت شد، قطع در نظر گرفته می‌شود
         }
     }
 
-    private fun calculateSpeedRating(delay: Int): String {
+    private fun calculateSpeedLabel(pingMs: Int): String {
         return when {
-            delay in 1..140 -> "عالی ⚡"
-            delay in 141..270 -> "خوب"
+            pingMs in 1..130 -> "بسیار سریع ⚡"
+            pingMs in 131..260 -> "خوب"
             else -> "متوسط"
         }
     }
