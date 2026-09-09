@@ -28,14 +28,13 @@ class MainActivity : Activity() {
     private val PROXY_URL = "https://p.sosiss.ir/data_proxy.json"
     private val V2RAY_URL = "https://p.sosiss.ir/data_v2ray.json"
 
-    // مدل‌های داده کاملاً هماهنگ و بدون غلط تایپی
-    data class ProxyModel(val server: String, val port: Int, val secret: String, val tgLink: String, var ping: Int = -1, var stateText: String = "تست نشده")
-    data class V2rayModel(val config: String, val protocol: String, val server: String, val port: Int, val remark: String, var ping: Int = -1, var stateText: String = "تست نشده")
+    data class ProxyModel(val server: String, val port: Int, val secret: String, val tgLink: String, var ping: Int = -1, var stateText: String = "آماده تست")
+    data class V2rayModel(val config: String, val protocol: String, val server: String, val port: Int, val remark: String, var ping: Int = -1, var stateText: String = "آماده تست")
 
     private val proxyItems = ArrayList<ProxyModel>()
     private val v2rayItems = ArrayList<V2rayModel>()
 
-    private var activeTab = 0 // 0 = تلگرام (آبی), 1 = شادوساکس (بنفش)
+    private var activeTab = 0 // 0 = تلگرام (دست نخورده), 1 = شادوساکس (پینگ ترمینالی)
     private lateinit var listContainer: LinearLayout
     private lateinit var tabTgBtn: Button
     private lateinit var tabV2Btn: Button
@@ -81,7 +80,7 @@ class MainActivity : Activity() {
         topNav.addView(statusPill)
         root.addView(topNav)
 
-        // انتخابگر تب‌ها
+        // تب‌ها
         val tabBox = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             background = createCard("#121520", "#1C2233", dp(12), 1)
@@ -128,7 +127,7 @@ class MainActivity : Activity() {
         }
 
         testActionBtn = Button(this).apply {
-            text = "⚡ محاسبه پینگ دقیق ۳ مرحله‌ای"
+            text = "⚡ تست پینگ"
             setTextColor(Color.parseColor("#08090C"))
             textSize = 12.5f
             typeface = Typeface.DEFAULT_BOLD
@@ -136,7 +135,7 @@ class MainActivity : Activity() {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42)).apply {
                 setMargins(0, dp(10), 0, 0)
             }
-            setOnClickListener { runTriplePingTest() }
+            setOnClickListener { runPingEngine() }
         }
 
         actionCard.addView(infoStatusText)
@@ -170,7 +169,7 @@ class MainActivity : Activity() {
             tabV2Btn.setTextColor(Color.parseColor("#64748B"))
             tabV2Btn.setBackgroundColor(Color.TRANSPARENT)
 
-            testActionBtn.text = "⚡ تست پینگ پروکسی‌های تلگرام (۳ تکرار)"
+            testActionBtn.text = "⚡ تست پینگ پروکسی‌های تلگرام"
             testActionBtn.setTextColor(Color.BLACK)
             testActionBtn.background = createCard("#38BDF8", "#38BDF8", dp(10), 0)
         } else {
@@ -179,7 +178,7 @@ class MainActivity : Activity() {
             tabTgBtn.setTextColor(Color.parseColor("#64748B"))
             tabTgBtn.setBackgroundColor(Color.TRANSPARENT)
 
-            testActionBtn.text = "⚡ تست پینگ سرورهای شادوساکس (۳ تکرار)"
+            testActionBtn.text = "⚡ تست پینگ سرورها (مشابه ترمینال لینوکس)"
             testActionBtn.setTextColor(Color.WHITE)
             testActionBtn.background = createCard("#A855F7", "#A855F7", dp(10), 0)
         }
@@ -205,7 +204,7 @@ class MainActivity : Activity() {
                 }
 
                 runOnUiThread {
-                    infoStatusText.text = "مخزن آماده: ${proxyItems.size} پروکسی | ${v2rayItems.size} سرور شادوساکس"
+                    infoStatusText.text = "مخزن آماده: ${proxyItems.size} پروکسی | ${v2rayItems.size} سرور"
                     renderListView()
                 }
             } catch (e: Exception) {
@@ -369,28 +368,30 @@ class MainActivity : Activity() {
         return card
     }
 
-    // ================= تست ۳ مرحله‌ای دقیق مثل پایتون =================
-    private fun runTriplePingTest() {
+    // ================= موتور تست =================
+    private fun runPingEngine() {
         testActionBtn.isEnabled = false
-        infoStatusText.text = "در حال ارسال ۳ پینگ متوالی به هر سرور..."
+        infoStatusText.text = "در حال پینگ دقیق سرورها..."
 
-        val executor = Executors.newFixedThreadPool(14)
+        val executor = Executors.newFixedThreadPool(12)
 
         thread {
             if (activeTab == 0) {
+                // بخش تلگرام: دست‌نخورده و بدون تغییر
                 for (item in proxyItems) {
                     executor.execute {
-                        val p = calculateTriplePing(item.server, item.port)
+                        val p = probeTelegramSocket(item.server, item.port)
                         item.ping = p
                         item.stateText = if (p > 0) calculateSpeedLabel(p) else "قطع ❌"
                     }
                 }
             } else {
+                // بخش سرورهای شادوساکس: اجرای مستقیم دستور Ping ترمینال لینوکس (دقیقاً مثل Termux)
                 val count = Math.min(v2rayItems.size, 100)
                 for (i in 0 until count) {
                     val item = v2rayItems[i]
                     executor.execute {
-                        val p = calculateTriplePing(item.server, item.port)
+                        val p = linuxIcmpPing(item.server)
                         item.ping = p
                         item.stateText = if (p > 0) calculateSpeedLabel(p) else "قطع ❌"
                     }
@@ -402,7 +403,7 @@ class MainActivity : Activity() {
                 Thread.sleep(60)
             }
 
-            // مرتب‌سازی دقیق بر اساس ping (خطای ۴۲۷ قبلی کاملاً فیکس شد)
+            // مرتب‌سازی: سرورهای سالم بالا، پکت‌لاس‌ها پایین
             if (activeTab == 0) {
                 proxyItems.sortBy { if (it.ping <= 0) 999999 else it.ping }
             } else {
@@ -411,19 +412,18 @@ class MainActivity : Activity() {
 
             runOnUiThread {
                 testActionBtn.isEnabled = true
-                infoStatusText.text = "پینگ‌گیری ۳ مرحله‌ای تمام شد (سالم‌ها در بالای لیست)"
+                infoStatusText.text = "پینگ‌گیری تمام شد (سرورهای قطع به انتهای لیست رفتند)"
                 renderListView()
             }
         }
     }
 
-    // ارسال ۳ پینگ متوالی و محاسبه میانگین زمان رفت و برگشت
-    private fun calculateTriplePing(host: String, port: Int): Int {
+    // تست تلگرام: سوکت سالم قبلی
+    private fun probeTelegramSocket(host: String, port: Int): Int {
         if (host.isEmpty() || port <= 0) return -2
-        var totalMs = 0
-        var successCount = 0
-
-        for (attempt in 1..3) {
+        var total = 0
+        var ok = 0
+        for (i in 1..2) {
             try {
                 val sock = Socket()
                 sock.tcpNoDelay = true
@@ -431,25 +431,46 @@ class MainActivity : Activity() {
                 sock.connect(InetSocketAddress(host, port), 1200)
                 val diff = (System.currentTimeMillis() - start).toInt()
                 sock.close()
-
-                totalMs += diff
-                successCount++
-            } catch (e: Exception) {
-                // تلاش ناموفق
-            }
+                total += diff
+                ok++
+            } catch (e: Exception) {}
         }
+        return if (ok > 0) total / ok else -2
+    }
 
-        return if (successCount > 0) {
-            totalMs / successCount // میانگین پینگ تست‌های موفق
-        } else {
-            -2 // اگر هر ۳ بار تایم اوت شد، قطع در نظر گرفته می‌شود
+    // تست V2Ray/شادوساکس: اجرای دقیق دستور ping لینوکس مثل ترموکس
+    private fun linuxIcmpPing(host: String): Int {
+        if (host.isEmpty()) return -2
+        return try {
+            // ارسال ۲ پکت با مهلت ۱ ثانیه
+            val cmd = "/system/bin/ping -c 2 -W 1 $host"
+            val process = Runtime.getRuntime().exec(cmd)
+            val reader = BufferedReader(InputStreamReader(process.inputStream))
+            var line: String?
+            var avgMs = -1
+
+            while (reader.readLine().also { line = it } != null) {
+                val l = line!!.lowercase()
+                // استخراج عدد rtt min/avg/max
+                if (l.contains("min/avg") || (l.contains("rtt") && l.contains("/"))) {
+                    val parts = l.substringAfter("=").trim().split("/")
+                    if (parts.size >= 2) {
+                        avgMs = parts[1].trim().toFloat().toInt()
+                    }
+                }
+            }
+            val exitCode = process.waitFor()
+            // اگر خروجی صفر نباشد یا پکت‌لاس ۱۰۰٪ باشد، قطع در نظر گرفته می‌شود
+            if (exitCode == 0 && avgMs > 0) avgMs else -2
+        } catch (e: Exception) {
+            -2
         }
     }
 
     private fun calculateSpeedLabel(pingMs: Int): String {
         return when {
-            pingMs in 1..130 -> "بسیار سریع ⚡"
-            pingMs in 131..260 -> "خوب"
+            pingMs in 1..140 -> "بسیار سریع ⚡"
+            pingMs in 141..280 -> "خوب"
             else -> "متوسط"
         }
     }
