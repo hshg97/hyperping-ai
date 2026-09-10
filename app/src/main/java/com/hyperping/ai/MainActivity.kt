@@ -1,35 +1,25 @@
-package ai.hyperping   // ← پکیج پروژه خودت را بگذار
+package com.hyperping.ai
 
 import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.content.res.ColorStateList
 import android.graphics.Color
-import android.graphics.LinearGradient
-import android.graphics.Shader
 import android.graphics.Typeface
-import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.RippleDrawable
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.Gravity
-import android.view.MotionEvent
 import android.view.View
-import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.AlphaAnimation
 import android.view.animation.Animation
 import android.view.animation.DecelerateInterpolator
-import android.widget.Button
-import android.widget.LinearLayout
-import android.widget.RelativeLayout
-import android.widget.ScrollView
-import android.widget.TextView
-import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
+import android.widget.*
 import org.json.JSONArray
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -40,374 +30,425 @@ import java.net.URL
 import java.util.concurrent.Executors
 import kotlin.concurrent.thread
 
-// ==================== ENDPOINTS ====================
-private val PROXY_URL = "https://p.sosiss.ir/data_proxy.json"
-private val V2RAY_URL = "https://p.sosiss.ir/data_v2ray.json"
+class MainActivity : Activity() {
 
-// ==================== PALETTE (Aurora Dark) ====================
-private const val C_BG_DEEP  = "#04050A"
-private const val C_BG_TOP   = "#0A0E1B"
-private const val C_NAV      = "#080B14"
-private const val C_SURFACE  = "#0E1220"
-private const val C_SURF_2   = "#131828"
-private const val C_STROKE   = "#1E2637"
-private const val C_STROKE_2 = "#2A3448"
-private const val C_TEXT     = "#F7FAFF"
-private const val C_MUTED    = "#8593AC"
-private const val C_DIM      = "#5A6780"
+    private val PROXY_URL = "https://p.sosiss.ir/data_proxy.json"
+    private val V2RAY_URL = "https://p.sosiss.ir/data_v2ray.json"
 
-private const val C_CYAN   = "#22D3EE"
-private const val C_BLUE   = "#3B82F6"
-private const val C_VIOLET = "#A855F7"
-private const val C_PINK   = "#EC4899"
-private const val C_GREEN  = "#34D399"
-private const val C_AMBER  = "#FBBF24"
-private const val C_RED    = "#FB4E6D"
+    // توکن‌های رنگی Aurora Dark
+    private val BG_DARK = "#04050A"
+    private val BG_HEADER = "#080B14"
+    private val CARD_SURFACE = "#0E1220"
+    private val CARD_SURFACE_SEC = "#131828"
+    private val STROKE_PRI = "#1E2637"
+    private val STROKE_BRIGHT = "#2A3448"
+    private val TXT_PRI = "#F7FAFF"
+    private val TXT_SEC = "#8593AC"
+    private val TXT_MUTED = "#5A6780"
 
-// ==================== MODELS ====================
-data class ProxyModel(
-    val server: String, val port: Int, val secret: String, val tgLink: String,
-    var ping: Int = -1, var stateText: String = "آماده تست"
-)
+    // لهجه‌ها
+    private val ACC_CYAN = "#22D3EE"
+    private val ACC_BLUE = "#3B82F6"
+    private val ACC_PURPLE = "#A855F7"
+    private val ACC_PINK = "#EC4899"
 
-data class V2rayModel(
-    val config: String, val protocol: String, val server: String, val port: Int, val remark: String,
-    var ping: Int = -1, var stateText: String = "آماده تست"
-)
+    // وضعیت‌ها
+    private val STAT_HEALTHY = "#34D399" // زیر 140
+    private val STAT_MEDIUM = "#FBBF24"  // 141 - 280
+    private val STAT_WEAK = "#FB923C"    // 281 - 500
+    private val STAT_DEAD = "#FB4E6D"    // بالای 500 یا ناموفق
 
-class MainActivity : AppCompatActivity() {
+    data class ProxyItem(val server: String, val port: Int, val secret: String, val tgLink: String, var ping: Int = -1, var index: Int = 0)
+    data class V2rayItem(val config: String, val protocol: String, val server: String, val port: Int, val remark: String, var ping: Int = -1, var index: Int = 0)
 
-    private val proxyItems = ArrayList<ProxyModel>()
-    private val v2rayItems = ArrayList<V2rayModel>()
+    private val allProxies = ArrayList<ProxyItem>()
+    private val allV2rays = ArrayList<V2rayItem>()
 
-    private var activeTab = 0 // 0 = تلگرام (دست نخورده), 1 = شادوساکس (پینگ ترمینالی)
+    private var activeTab = 0 // 0 = Telegram, 1 = Shadowsocks
+    private var activeFilter = 0 // 0=All, 1=Healthy, 2=Fast, 3=Dead
+    private var searchQuery = ""
 
-    private lateinit var listContainer: LinearLayout
-    private lateinit var tabTgBtn: Button
-    private lateinit var tabV2Btn: Button
-    private lateinit var infoStatusText: TextView
-    private lateinit var testActionBtn: Button
+    private lateinit var contentListLayout: LinearLayout
+    private lateinit var tabTgBtn: TextView
+    private lateinit var tabV2Btn: TextView
+    private lateinit var accentLine: View
+    private lateinit var actionBtn: Button
+    private lateinit var statusDescText: TextView
+    private lateinit var loadingProgressBar: View
+    private lateinit var filterChips: ArrayList<TextView>
 
-    // --- فقط تزئینی ---
-    private lateinit var accentGlowLine: View
-    private lateinit var headerBadge: TextView
-    private lateinit var loadingTrack: LinearLayout
-    private lateinit var loadingThumb: View
-    private var loadAnim: ObjectAnimator? = null
+    // شمارنده‌های اکشن‌کارت
+    private lateinit var countTotalVal: TextView
+    private lateinit var countHealthyVal: TextView
+    private lateinit var countBestVal: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        initLuxuryUI()
-        fetchData()
+        window.statusBarColor = Color.parseColor(BG_HEADER)
+        window.navigationBarColor = Color.parseColor(BG_DARK)
+        buildAuroraInterface()
+        fetchCloudData()
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
-    private fun initLuxuryUI() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            window.statusBarColor = Color.parseColor(C_NAV)
-            window.navigationBarColor = Color.parseColor(C_BG_DEEP)
-        }
-
+    private fun buildAuroraInterface() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = gradient(arrayOf(C_BG_TOP, C_BG_DEEP, C_BG_DEEP), 0, GradientDrawable.Orientation.TOP_BOTTOM)
+            setBackgroundColor(Color.parseColor(BG_DARK))
+            layoutDirection = View.LAYOUT_DIRECTION_RTL
         }
 
-        // ==================== TOP NAV ====================
-        val topNav = RelativeLayout(this).apply {
-            background = gradient(arrayOf("#0C1120", C_NAV), 0, GradientDrawable.Orientation.TOP_BOTTOM)
-            setPadding(dp(18), dp(18), dp(18), dp(16))
+        // ================= ۱. هدر لوکس با آیکون گرادینتی و چراغ نبض‌دار =================
+        val header = RelativeLayout(this).apply {
+            setBackgroundColor(Color.parseColor(BG_HEADER))
+            setPadding(dp(16), dp(14), dp(16), dp(14))
         }
-
-        val statusPill = LinearLayout(this).apply {
-            id = View.generateViewId()
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            background = createCard("#0B2230", C_CYAN, dp(20), 1)
-            setPadding(dp(10), dp(6), dp(11), dp(6))
-            val p = RelativeLayout.LayoutParams(
-                RelativeLayout.LayoutParams.WRAP_CONTENT, RelativeLayout.LayoutParams.WRAP_CONTENT
-            )
-            p.addRule(RelativeLayout.ALIGN_PARENT_END)
-            p.addRule(RelativeLayout.CENTER_VERTICAL)
-            layoutParams = p
-        }
-
-        val liveDot = View(this).apply {
-            background = solid(C_CYAN, dp(4))
-            layoutParams = LinearLayout.LayoutParams(dp(7), dp(7)).apply { setMargins(0, 0, dp(6), 0) }
-            pulse(this)
-        }
-
-        headerBadge = TextView(this).apply {
-            text = "ONLINE"
-            setTextColor(Color.parseColor(C_CYAN))
-            textSize = 9.5f
-            typeface = uiFont(true)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) letterSpacing = 0.12f
-        }
-
-        statusPill.addView(liveDot)
-        statusPill.addView(headerBadge)
 
         val brandBox = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            val p = RelativeLayout.LayoutParams(
-                RelativeLayout.LayoutParams.WRAP_CONTENT, RelativeLayout.LayoutParams.WRAP_CONTENT
-            )
-            p.addRule(RelativeLayout.ALIGN_PARENT_START)
-            p.addRule(RelativeLayout.CENTER_VERTICAL)
-            p.addRule(RelativeLayout.START_OF, statusPill.id)
-            layoutParams = p
         }
 
         val iconTile = TextView(this).apply {
             text = "H"
+            setTextColor(Color.WHITE)
+            textSize = 15f
+            typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
-            setTextColor(Color.parseColor("#04050A"))
-            textSize = 17f
-            typeface = uiFont(true)
-            background = gradient(arrayOf(C_CYAN, C_BLUE, C_VIOLET), dp(12), GradientDrawable.Orientation.TL_BR)
-            layoutParams = LinearLayout.LayoutParams(dp(38), dp(38)).apply { setMargins(0, 0, dp(11), 0) }
-            glow(this, C_CYAN, 10)
+            val size = dp(34)
+            layoutParams = LinearLayout.LayoutParams(size, size).apply { setMargins(0, 0, dp(12), 0) }
+            background = createGradient(ACC_CYAN, ACC_PURPLE, dp(10), 0, "")
         }
 
         val titleCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-
-        val appLogo = TextView(this).apply {
+        val appName = TextView(this).apply {
             text = "HYPER CORE"
-            setTextColor(Color.parseColor(C_TEXT))
-            textSize = 17f
-            typeface = uiFont(true)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) letterSpacing = 0.08f
-            post {
-                if (width > 0) {
-                    paint.shader = LinearGradient(
-                        0f, 0f, width.toFloat(), 0f,
-                        intArrayOf(
-                            Color.parseColor(C_CYAN),
-                            Color.parseColor("#818CF8"),
-                            Color.parseColor(C_PINK)
-                        ),
-                        null, Shader.TileMode.CLAMP
-                    )
-                    invalidate()
-                }
-            }
+            setTextColor(Color.parseColor(TXT_PRI))
+            textSize = 16.5f
+            typeface = Typeface.DEFAULT_BOLD
         }
-
-        val appSub = TextView(this).apply {
-            text = "PROXY  ·  SHADOWSOCKS  ·  PING LAB"
-            setTextColor(Color.parseColor(C_DIM))
+        val subTech = TextView(this).apply {
+            text = "PROXY · SHADOWSOCKS · PING LAB"
+            setTextColor(Color.parseColor(TXT_MUTED))
             textSize = 8.5f
-            typeface = uiFont(false)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) letterSpacing = 0.16f
-            setPadding(0, dp(3), 0, 0)
+            typeface = Typeface.MONOSPACE
+            letterSpacing = 0.12f
+            setPadding(0, dp(2), 0, 0)
         }
-
-        titleCol.addView(appLogo)
-        titleCol.addView(appSub)
+        titleCol.addView(appName)
+        titleCol.addView(subTech)
         brandBox.addView(iconTile)
         brandBox.addView(titleCol)
+        header.addView(brandBox)
 
-        topNav.addView(statusPill)
-        topNav.addView(brandBox)
-        root.addView(topNav)
-
-        accentGlowLine = View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(2))
-            background = gradient(arrayOf(C_CYAN, C_VIOLET, C_PINK), 0, GradientDrawable.Orientation.LEFT_RIGHT)
-        }
-        root.addView(accentGlowLine)
-
-        // ==================== TABS ====================
-        val tabBox = LinearLayout(this).apply {
+        // قرص وضعیت ONLINE با انیمیشن آلفای بی‌نهایت
+        val onlinePill = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            background = createCard("#0C1019", C_STROKE, dp(16), 1)
+            gravity = Gravity.CENTER_VERTICAL
+            background = createShape(CARD_SURFACE_SEC, STROKE_PRI, dp(20), 1)
+            setPadding(dp(10), dp(5), dp(12), dp(5))
+            val p = RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.WRAP_CONTENT, RelativeLayout.LayoutParams.WRAP_CONTENT)
+            p.addRule(RelativeLayout.ALIGN_PARENT_LEFT)
+            p.addRule(RelativeLayout.CENTER_VERTICAL)
+            layoutParams = p
+        }
+
+        val pulseDot = View(this).apply {
+            val s = dp(8)
+            layoutParams = LinearLayout.LayoutParams(s, s).apply { setMargins(0, 0, dp(6), 0) }
+            background = createShape(STAT_HEALTHY, STAT_HEALTHY, dp(10), 0)
+            val anim = AlphaAnimation(0.25f, 1.0f).apply {
+                duration = 750
+                repeatCount = Animation.INFINITE
+                repeatMode = Animation.REVERSE
+            }
+            startAnimation(anim)
+        }
+        val onlineText = TextView(this).apply {
+            text = "ONLINE"
+            setTextColor(Color.parseColor(TXT_PRI))
+            textSize = 10f
+            typeface = Typeface.DEFAULT_BOLD
+            letterSpacing = 0.1f
+        }
+        onlinePill.addView(pulseDot)
+        onlinePill.addView(onlineText)
+        header.addView(onlinePill)
+
+        root.addView(header)
+
+        // خط ۲dp گرادینت لهجه زیر هدر
+        accentLine = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(2))
+            background = createGradient(ACC_CYAN, ACC_BLUE, 0, 0, "")
+        }
+        root.addView(accentLine)
+
+        // ================= ۲. تب‌های قرصی شکل =================
+        val tabContainer = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = createShape("#0A0D18", STROKE_PRI, dp(22), 1)
             setPadding(dp(5), dp(5), dp(5), dp(5))
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(dp(16), dp(16), dp(16), dp(10)) }
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)).apply {
+                setMargins(dp(16), dp(12), dp(16), dp(8))
+            }
             weightSum = 2f
         }
 
-        tabTgBtn = Button(this).apply {
-            text = "✈️  پروکسی تلگرام"
-            textSize = 12f
-            typeface = uiFont(true)
-            layoutParams = LinearLayout.LayoutParams(0, dp(44), 1f)
-            setOnClickListener { setTab(0) }
-            polish()
-        }
+        tabTgBtn = createTabButton("پروکسی تلگرام (MTProto)", 0)
+        tabV2Btn = createTabButton("سرورهای شادوساکس (SS)", 1)
+        tabContainer.addView(tabTgBtn)
+        tabContainer.addView(tabV2Btn)
+        root.addView(tabContainer)
 
-        tabV2Btn = Button(this).apply {
-            text = "🛡️  شادوساکس"
-            textSize = 12f
-            typeface = uiFont(true)
-            layoutParams = LinearLayout.LayoutParams(0, dp(44), 1f)
-            setOnClickListener { setTab(1) }
-            polish()
-        }
-
-        tabBox.addView(tabTgBtn)
-        tabBox.addView(tabV2Btn)
-        root.addView(tabBox)
-
-        // ==================== ACTION CARD ====================
+        // ================= ۳. کارت اکشن و شمارنده‌های ۳ گانه =================
         val actionCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = createCard(C_SURFACE, C_STROKE, dp(20), 1)
-            setPadding(dp(16), dp(15), dp(16), dp(16))
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(dp(16), dp(4), dp(16), dp(14)) }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) elevation = dp(6).toFloat()
+            background = createShape(CARD_SURFACE, STROKE_PRI, dp(20), 1)
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(dp(16), dp(4), dp(16), dp(10))
+            }
         }
 
-        val caption = TextView(this).apply {
-            text = "وضعیت مخزن"
-            setTextColor(Color.parseColor(C_DIM))
-            textSize = 9.5f
-            typeface = uiFont(true)
-            setPadding(0, 0, 0, dp(5))
+        // ردیف آمار (تعداد کل | سالم | بهترین پینگ)
+        val statsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            weightSum = 3f
+            setPadding(0, dp(4), 0, dp(12))
         }
 
-        infoStatusText = TextView(this).apply {
-            text = "در حال بارگذاری مخزن..."
-            setTextColor(Color.parseColor(C_MUTED))
-            textSize = 12.5f
-            typeface = uiFont(false)
-            setLineSpacing(dp(3).toFloat(), 1f)
-        }
+        countTotalVal = createStatColumn(statsRow, "تعداد کل", "۰")
+        statsRow.addView(createVerticalDivider())
+        countHealthyVal = createStatColumn(statsRow, "سالم", "۰", STAT_HEALTHY)
+        statsRow.addView(createVerticalDivider())
+        countBestVal = createStatColumn(statsRow, "بهترین پینگ", "---", ACC_CYAN)
+        actionCard.addView(statsRow)
 
-        testActionBtn = Button(this).apply {
-            text = "⚡ تست پینگ"
+        // نوار لودینگ باریک ۴dp
+        loadingProgressBar = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(4)).apply {
+                setMargins(0, dp(4), 0, dp(10))
+            }
+            background = createGradient(ACC_CYAN, ACC_BLUE, dp(2), 0, "")
+            visibility = View.INVISIBLE
+        }
+        actionCard.addView(loadingProgressBar)
+
+        statusDescText = TextView(this).apply {
+            text = "مخزن در حال دریافت آخرین سرورها..."
+            setTextColor(Color.parseColor(TXT_SEC))
+            textSize = 12f
+            setPadding(0, 0, 0, dp(10))
+        }
+        actionCard.addView(statusDescText)
+
+        // دکمه اصلی ۵۰dp با انیمیشن ریپل و کلیک
+        actionBtn = Button(this).apply {
+            text = "⚡ تست و اعتبارسنجی دقیق پینگ"
+            textSize = 13.5f
+            typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.parseColor("#04050A"))
-            textSize = 13f
-            typeface = uiFont(true)
-            background = ripple(
-                gradient(arrayOf(C_CYAN, C_BLUE), dp(14), GradientDrawable.Orientation.LEFT_RIGHT), "#FFFFFF"
-            )
+            background = createGradient(ACC_CYAN, ACC_BLUE, dp(14), 0, "")
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(50))
-                .apply { setMargins(0, dp(12), 0, 0) }
-            setOnClickListener { runPingEngine() }
-            polish()
-            pressScale(this)
-            glow(this, C_CYAN, 14)
+            setOnClickListener {
+                animateClick(this)
+                executeSmartPingTest()
+            }
         }
-
-        actionCard.addView(caption)
-        actionCard.addView(infoStatusText)
-        actionCard.addView(buildLoadingBar())
-        actionCard.addView(testActionBtn)
+        actionCard.addView(actionBtn)
         root.addView(actionCard)
 
-        // ==================== LIST ====================
+        // ================= ۴. فیلد جستجو و چیپ‌های فیلتر =================
+        val searchBox = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            background = createShape(CARD_SURFACE_SEC, STROKE_PRI, dp(14), 1)
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(dp(16), 0, dp(16), dp(8))
+            }
+            gravity = Gravity.CENTER_VERTICAL
+        }
+
+        val searchInput = EditText(this).apply {
+            hint = "جستجوی سرور، آی‌پی، موقعیت..."
+            setHintTextColor(Color.parseColor(TXT_MUTED))
+            setTextColor(Color.parseColor(TXT_PRI))
+            textSize = 12.5f
+            background = null
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    searchQuery = s.toString().trim().lowercase()
+                    renderFilteredList()
+                }
+                override fun afterTextChanged(s: Editable?) {}
+            })
+        }
+        searchBox.addView(searchInput)
+        root.addView(searchBox)
+
+        // چیپ‌های فیلتر ("همه", "سالم", "سریع", "قطع")
+        val chipsRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(16), 0, dp(16), dp(8))
+        }
+
+        filterChips = ArrayList()
+        val chipNames = listOf("همه", "سالم", "سریع (<150ms)", "قطع")
+        for (i in chipNames.indices) {
+            val chip = TextView(this).apply {
+                text = chipNames[i]
+                textSize = 10.5f
+                typeface = Typeface.DEFAULT_BOLD
+                setPadding(dp(12), dp(6), dp(12), dp(6))
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    setMargins(0, 0, dp(8), 0)
+                }
+                setOnClickListener {
+                    activeFilter = i
+                    updateFilterChipsUI()
+                    renderFilteredList()
+                }
+            }
+            filterChips.add(chip)
+            chipsRow.addView(chip)
+        }
+        root.addView(chipsRow)
+        updateFilterChipsUI()
+
+        // ================= ۵. لیست اسکرول آیتم‌ها =================
         val scroller = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
-            isVerticalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_NEVER
-            clipToPadding = false
+            isVerticalScrollBarEnabled = false
         }
-        listContainer = LinearLayout(this).apply {
+        contentListLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(16), dp(2), dp(16), dp(28))
+            setPadding(dp(16), 0, dp(16), dp(24))
         }
-        scroller.addView(listContainer)
+        scroller.addView(contentListLayout)
         root.addView(scroller)
 
         setContentView(root)
-        refreshTabUI()
+        updateActiveTabVisuals()
     }
 
-    private fun setTab(tab: Int) {
-        activeTab = tab
-        refreshTabUI()
-        renderListView()
-    }
-
-    private fun refreshTabUI() {
-        if (activeTab == 0) {
-            tabTgBtn.setTextColor(Color.WHITE)
-            tabTgBtn.background = createCard("#10243A", C_CYAN, dp(12), 1)
-            glow(tabTgBtn, C_CYAN, 8)
-            tabV2Btn.setTextColor(Color.parseColor(C_DIM))
-            tabV2Btn.background = ripple(solid("#00000000", dp(12)), C_CYAN)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) tabV2Btn.elevation = 0f
-
-            testActionBtn.text = "⚡ تست پینگ پروکسی‌های تلگرام"
-            testActionBtn.setTextColor(Color.parseColor("#04050A"))
-            testActionBtn.background = ripple(
-                gradient(arrayOf(C_CYAN, C_BLUE), dp(14), GradientDrawable.Orientation.LEFT_RIGHT), "#FFFFFF"
-            )
-            glow(testActionBtn, C_CYAN, 14)
-
-            accentGlowLine.background =
-                gradient(arrayOf(C_CYAN, C_BLUE, "#0EA5E9"), 0, GradientDrawable.Orientation.LEFT_RIGHT)
-            loadingThumb.background =
-                gradient(arrayOf(C_CYAN, C_BLUE), dp(3), GradientDrawable.Orientation.LEFT_RIGHT)
-            headerBadge.setTextColor(Color.parseColor(C_CYAN))
-        } else {
-            tabV2Btn.setTextColor(Color.WHITE)
-            tabV2Btn.background = createCard("#241040", C_VIOLET, dp(12), 1)
-            glow(tabV2Btn, C_VIOLET, 8)
-            tabTgBtn.setTextColor(Color.parseColor(C_DIM))
-            tabTgBtn.background = ripple(solid("#00000000", dp(12)), C_VIOLET)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) tabTgBtn.elevation = 0f
-
-            testActionBtn.text = "⚡ تست پینگ سرورها (مشابه ترمینال لینوکس)"
-            testActionBtn.setTextColor(Color.WHITE)
-            testActionBtn.background = ripple(
-                gradient(arrayOf(C_VIOLET, C_PINK), dp(14), GradientDrawable.Orientation.LEFT_RIGHT), "#FFFFFF"
-            )
-            glow(testActionBtn, C_VIOLET, 14)
-
-            accentGlowLine.background =
-                gradient(arrayOf(C_VIOLET, C_PINK, "#F472B6"), 0, GradientDrawable.Orientation.LEFT_RIGHT)
-            loadingThumb.background =
-                gradient(arrayOf(C_VIOLET, C_PINK), dp(3), GradientDrawable.Orientation.LEFT_RIGHT)
-            headerBadge.setTextColor(Color.parseColor(C_VIOLET))
+    private fun createTabButton(title: String, tabIndex: Int): TextView {
+        return TextView(this).apply {
+            text = title
+            textSize = 11.5f
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
+            setOnClickListener {
+                if (activeTab != tabIndex) {
+                    activeTab = tabIndex
+                    updateActiveTabVisuals()
+                    renderFilteredList()
+                }
+            }
         }
     }
 
-    private fun fetchData() {
+    private fun updateActiveTabVisuals() {
+        if (activeTab == 0) {
+            tabTgBtn.setTextColor(Color.parseColor(TXT_PRI))
+            tabTgBtn.background = createShape(CARD_SURFACE_SEC, ACC_CYAN, dp(18), 1)
+            tabV2Btn.setTextColor(Color.parseColor(TXT_MUTED))
+            tabV2Btn.background = null
+
+            accentLine.background = createGradient(ACC_CYAN, ACC_BLUE, 0, 0, "")
+            actionBtn.background = createGradient(ACC_CYAN, ACC_BLUE, dp(14), 0, "")
+            countBestVal.setTextColor(Color.parseColor(ACC_CYAN))
+        } else {
+            tabV2Btn.setTextColor(Color.parseColor(TXT_PRI))
+            tabV2Btn.background = createShape(CARD_SURFACE_SEC, ACC_PURPLE, dp(18), 1)
+            tabTgBtn.setTextColor(Color.parseColor(TXT_MUTED))
+            tabTgBtn.background = null
+
+            accentLine.background = createGradient(ACC_PURPLE, ACC_PINK, 0, 0, "")
+            actionBtn.background = createGradient(ACC_PURPLE, ACC_PINK, dp(14), 0, "")
+            countBestVal.setTextColor(Color.parseColor(ACC_PURPLE))
+        }
+        updateStatsCounters()
+    }
+
+    private fun updateFilterChipsUI() {
+        for (i in filterChips.indices) {
+            val chip = filterChips[i]
+            if (i == activeFilter) {
+                chip.setTextColor(Color.parseColor(TXT_PRI))
+                val color = if (activeTab == 0) ACC_CYAN else ACC_PURPLE
+                chip.background = createShape(CARD_SURFACE_SEC, color, dp(20), 1)
+            } else {
+                chip.setTextColor(Color.parseColor(TXT_MUTED))
+                chip.background = createShape("#090C16", STROKE_PRI, dp(20), 1)
+            }
+        }
+    }
+
+    private fun createStatColumn(parent: LinearLayout, label: String, initialVal: String, valColor: String = TXT_PRI): TextView {
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        }
+        val v = TextView(this).apply {
+            text = initialVal
+            setTextColor(Color.parseColor(valColor))
+            textSize = 15f
+            typeface = Typeface.DEFAULT_BOLD
+        }
+        val l = TextView(this).apply {
+            text = label
+            setTextColor(Color.parseColor(TXT_MUTED))
+            textSize = 9.5f
+            setPadding(0, dp(2), 0, 0)
+        }
+        col.addView(v)
+        col.addView(l)
+        parent.addView(col)
+        return v
+    }
+
+    private fun createVerticalDivider(): View {
+        return View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(1), dp(26)).apply { gravity = Gravity.CENTER_VERTICAL }
+            setBackgroundColor(Color.parseColor(STROKE_PRI))
+        }
+    }
+
+    // ================= دریافت اطلاعات از سرور =================
+    private fun fetchCloudData() {
         thread {
             try {
                 val pStr = httpGet(PROXY_URL)
                 val pArr = JSONArray(pStr)
-                proxyItems.clear()
+                allProxies.clear()
                 for (i in 0 until pArr.length()) {
                     val o = pArr.getJSONObject(i)
-                    proxyItems.add(
-                        ProxyModel(o.optString("server"), o.optInt("port"), o.optString("secret"), o.optString("tg_link"))
-                    )
+                    allProxies.add(ProxyItem(o.optString("server"), o.optInt("port"), o.optString("secret"), o.optString("tg_link"), -1, i + 1))
                 }
 
                 val vStr = httpGet(V2RAY_URL)
                 val vArr = JSONArray(vStr)
-                v2rayItems.clear()
+                allV2rays.clear()
                 for (i in 0 until vArr.length()) {
                     val o = vArr.getJSONObject(i)
-                    v2rayItems.add(
-                        V2rayModel(
-                            o.optString("config"),
-                            o.optString("protocol", "SS"),
-                            o.optString("server"),
-                            o.optInt("port", 443),
-                            o.optString("remark", "Canada")
-                        )
-                    )
+                    allV2rays.add(V2rayItem(o.optString("config"), o.optString("protocol", "SS"), o.optString("server"), o.optInt("port", 443), o.optString("remark", "Canada"), -1, i + 1))
                 }
 
                 runOnUiThread {
-                    infoStatusText.text = "مخزن آماده: ${proxyItems.size} پروکسی | ${v2rayItems.size} سرور"
-                    renderListView()
+                    statusDescText.text = "مخزن بروز است. سرورها آماده تست و اتصال می‌باشند."
+                    updateStatsCounters()
+                    renderFilteredList()
                 }
             } catch (e: Exception) {
                 runOnUiThread {
-                    infoStatusText.text = "خطا در دریافت اطلاعات: " + (e.message ?: "تایم‌اوت")
+                    statusDescText.text = "خطا در اتصال به هاست: " + (e.message ?: "تایم‌اوت")
                 }
             }
         }
@@ -425,107 +466,152 @@ class MainActivity : AppCompatActivity() {
         return b.toString()
     }
 
-    private fun renderListView() {
-        listContainer.removeAllViews()
+    private fun updateStatsCounters() {
+        if (activeTab == 0) {
+            countTotalVal.text = allProxies.size.toString()
+            val healthy = allProxies.count { it.ping > 0 }
+            countHealthyVal.text = healthy.toString()
+            val best = allProxies.filter { it.ping > 0 }.minByOrNull { it.ping }
+            countBestVal.text = if (best != null) "${best.ping}ms" else "---"
+        } else {
+            countTotalVal.text = allV2rays.size.toString()
+            val healthy = allV2rays.count { it.ping > 0 }
+            countHealthyVal.text = healthy.toString()
+            val best = allV2rays.filter { it.ping > 0 }.minByOrNull { it.ping }
+            countBestVal.text = if (best != null) "${best.ping}ms" else "---"
+        }
+    }
+
+    // ================= فیلتر و رندر پله‌ای کارت‌ها =================
+    private fun renderFilteredList() {
+        contentListLayout.removeAllViews()
+
+        val bestPing = if (activeTab == 0) {
+            allProxies.filter { it.ping > 0 }.minByOrNull { it.ping }?.ping ?: -1
+        } else {
+            allV2rays.filter { it.ping > 0 }.minByOrNull { it.ping }?.ping ?: -1
+        }
 
         if (activeTab == 0) {
-            for (p in proxyItems) {
-                val v = createProxyView(p)
-                listContainer.addView(v)
-                enterAnim(v, listContainer.childCount - 1)
+            val filtered = allProxies.filter {
+                val matchSearch = searchQuery.isEmpty() || it.server.contains(searchQuery) || it.port.toString().contains(searchQuery)
+                val matchFilter = when (activeFilter) {
+                    1 -> it.ping in 1..500
+                    2 -> it.ping in 1..150
+                    3 -> it.ping == -2
+                    else -> true
+                }
+                matchSearch && matchFilter
+            }
+
+            for (i in filtered.indices) {
+                val card = buildProxyCard(filtered[i], filtered[i].ping == bestPing && bestPing > 0)
+                contentListLayout.addView(card)
+                animateEntrance(card, i)
             }
         } else {
-            val count = Math.min(v2rayItems.size, 100)
+            val filtered = allV2rays.filter {
+                val matchSearch = searchQuery.isEmpty() || it.server.contains(searchQuery) || it.remark.lowercase().contains(searchQuery)
+                val matchFilter = when (activeFilter) {
+                    1 -> it.ping in 1..500
+                    2 -> it.ping in 1..150
+                    3 -> it.ping == -2
+                    else -> true
+                }
+                matchSearch && matchFilter
+            }
+
+            val count = Math.min(filtered.size, 100)
             for (i in 0 until count) {
-                val v = createV2rayView(v2rayItems[i])
-                listContainer.addView(v)
-                enterAnim(v, i)
+                val card = buildV2rayCard(filtered[i], filtered[i].ping == bestPing && bestPing > 0)
+                contentListLayout.addView(card)
+                animateEntrance(card, i)
             }
         }
     }
 
-    private fun createProxyView(item: ProxyModel): View {
-        val idx = listContainer.childCount + 1
-
+    // ================= کارت پروکسی تلگرام =================
+    private fun buildProxyCard(item: ProxyItem, isBest: Boolean): View {
+        val isDead = item.ping == -2
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = createCard(
-                if (item.ping > 0) "#0C1522" else C_SURFACE,
-                if (item.ping > 0) C_CYAN else C_STROKE, dp(20), 1
-            )
-            setPadding(dp(15), dp(14), dp(15), dp(14))
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(0, 0, 0, dp(12)) }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) elevation = dp(3).toFloat()
+            val borderColor = if (isBest) ACC_CYAN else if (item.ping > 0) STROKE_BRIGHT else if (isDead) STAT_DEAD else STROKE_PRI
+            val bgCol = if (isBest) "#0F1626" else CARD_SURFACE
+            background = createShape(bgCol, borderColor, dp(20), 1)
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, 0, dp(12))
+            }
+            if (isDead) alpha = 0.65f
         }
 
-        val row = LinearLayout(this).apply {
+        // ردیف بالا
+        val topRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
 
-        val indexChip = TextView(this).apply {
-            text = "$idx"
+        // چیپ شماره ۳۰x۳۰
+        val numChip = TextView(this).apply {
+            text = item.index.toString()
+            setTextColor(Color.parseColor(TXT_SEC))
+            textSize = 10f
+            typeface = Typeface.MONOSPACE
             gravity = Gravity.CENTER
-            setTextColor(Color.parseColor(if (item.ping > 0) C_CYAN else C_DIM))
-            textSize = 10.5f
-            typeface = uiFont(true)
-            background = createCard(C_SURF_2, if (item.ping > 0) C_CYAN else C_STROKE_2, dp(10), 1)
-            layoutParams = LinearLayout.LayoutParams(dp(30), dp(30)).apply { setMargins(0, 0, dp(10), 0) }
+            val s = dp(30)
+            layoutParams = LinearLayout.LayoutParams(s, s).apply { setMargins(0, 0, dp(12), 0) }
+            background = createShape(CARD_SURFACE_SEC, STROKE_PRI, dp(10), 1)
         }
 
+        // ستون اطلاعات
         val infoCol = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
-
         val ipText = TextView(this).apply {
             text = "${item.server}:${item.port}"
-            setTextColor(Color.parseColor(C_TEXT))
-            textSize = 13f
-            typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
-            maxLines = 1
+            setTextColor(Color.parseColor(TXT_PRI))
+            textSize = 13.5f
+            typeface = Typeface.MONOSPACE
         }
-
-        val typeLine = TextView(this).apply {
-            text = "MTPROTO  ·  TELEGRAM"
-            setTextColor(Color.parseColor(C_DIM))
-            textSize = 8.5f
-            typeface = uiFont(false)
-            setPadding(0, dp(3), 0, 0)
+        val subProtocol = TextView(this).apply {
+            text = "MTPROTO · TELEGRAM"
+            setTextColor(Color.parseColor(TXT_MUTED))
+            textSize = 9.5f
+            letterSpacing = 0.1f
+            setPadding(0, dp(2), 0, 0)
         }
-
         infoCol.addView(ipText)
-        infoCol.addView(typeLine)
+        infoCol.addView(subProtocol)
 
-        val badgeCol = LinearLayout(this).apply {
+        // ستون پینگ و سیگنال ۴ تایی
+        val statusCol = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.END
+            gravity = Gravity.CENTER_HORIZONTAL
         }
 
-        val badge = TextView(this).apply {
-            text = if (item.ping > 0) "${item.ping}ms | ${item.stateText}" else item.stateText
-            setTextColor(Color.parseColor(pingColor(item.ping)))
-            textSize = 11f
-            typeface = uiFont(true)
-            background = createCard(pingBg(item.ping), pingColor(item.ping), dp(20), 1)
-            setPadding(dp(10), dp(5), dp(10), dp(5))
+        val pingBadge = TextView(this).apply {
+            text = getPingText(item.ping, isBest)
+            setTextColor(Color.parseColor(getPingColor(item.ping)))
+            textSize = 10.5f
+            typeface = Typeface.DEFAULT_BOLD
+            background = createShape(CARD_SURFACE_SEC, getPingColor(item.ping), dp(20), 1)
+            setPadding(dp(9), dp(3), dp(9), dp(3))
         }
 
-        badgeCol.addView(badge)
-        if (item.ping > 0) {
-            val bars = signalBars(item.ping)
-            (bars.layoutParams as LinearLayout.LayoutParams).setMargins(0, dp(6), dp(2), 0)
-            badgeCol.addView(bars)
-        }
+        val signalBar = createSignalBar(item.ping)
+        statusCol.addView(pingBadge)
+        statusCol.addView(signalBar)
 
-        row.addView(indexChip)
-        row.addView(infoCol)
-        row.addView(badgeCol)
-        card.addView(row)
-        card.addView(divider())
+        topRow.addView(numChip)
+        topRow.addView(infoCol)
+        topRow.addView(statusCol)
+        card.addView(topRow)
 
+        // جداکننده فید گرادینتی
+        card.addView(createDivider())
+
+        // دکمه‌های پایین
         val btnRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, dp(10), 0, 0)
@@ -536,32 +622,29 @@ class MainActivity : AppCompatActivity() {
             text = "اتصال به تلگرام"
             setTextColor(Color.parseColor("#04050A"))
             textSize = 12f
-            typeface = uiFont(true)
-            background = ripple(
-                gradient(arrayOf(C_CYAN, C_BLUE), dp(12), GradientDrawable.Orientation.LEFT_RIGHT), "#FFFFFF"
-            )
-            layoutParams = LinearLayout.LayoutParams(0, dp(42), 1.2f).apply { setMargins(0, 0, dp(8), 0) }
-            polish()
-            pressScale(this)
+            typeface = Typeface.DEFAULT_BOLD
+            background = createGradient(ACC_CYAN, ACC_BLUE, dp(12), 0, "")
+            layoutParams = LinearLayout.LayoutParams(0, dp(42), 1.25f).apply { setMargins(0, 0, dp(8), 0) }
             setOnClickListener {
+                animateClick(this)
                 try {
                     startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(item.tgLink)))
                 } catch (e: Exception) {
-                    Toast.makeText(this@MainActivity, "تلگرام یافت نشد!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this@MainActivity, "تلگرام نصب نیست!", Toast.LENGTH_SHORT).show()
                 }
             }
         }
 
         val copyBtn = Button(this).apply {
-            text = "⧉  کپی"
-            setTextColor(Color.parseColor("#CBD5E1"))
-            textSize = 12f
-            typeface = uiFont(true)
-            background = ripple(createCard(C_SURF_2, C_STROKE_2, dp(12), 1), C_CYAN)
-            layoutParams = LinearLayout.LayoutParams(0, dp(42), 0.8f)
-            polish()
-            pressScale(this)
-            setOnClickListener { copyClip(item.tgLink, "لینک پروکسی کپی شد") }
+            text = "کپی لینک"
+            setTextColor(Color.parseColor(TXT_SEC))
+            textSize = 11.5f
+            background = createShape(CARD_SURFACE_SEC, STROKE_BRIGHT, dp(12), 1)
+            layoutParams = LinearLayout.LayoutParams(0, dp(42), 0.75f)
+            setOnClickListener {
+                animateClick(this)
+                copyToClipboard(item.tgLink, "لینک پروکسی تلگرام کپی شد")
+            }
         }
 
         btnRow.addView(connBtn)
@@ -571,142 +654,186 @@ class MainActivity : AppCompatActivity() {
         return card
     }
 
-    private fun createV2rayView(item: V2rayModel): View {
-        val idx = listContainer.childCount + 1
-
+    // ================= کارت شادوساکس V2Ray =================
+    private fun buildV2rayCard(item: V2rayItem, isBest: Boolean): View {
+        val isDead = item.ping == -2
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = createCard(
-                if (item.ping > 0) "#150C24" else C_SURFACE,
-                if (item.ping > 0) C_VIOLET else C_STROKE, dp(20), 1
-            )
-            setPadding(dp(15), dp(14), dp(15), dp(14))
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { setMargins(0, 0, 0, dp(12)) }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) elevation = dp(3).toFloat()
+            val borderColor = if (isBest) ACC_PURPLE else if (item.ping > 0) STROKE_BRIGHT else if (isDead) STAT_DEAD else STROKE_PRI
+            val bgCol = if (isBest) "#181026" else CARD_SURFACE
+            background = createShape(bgCol, borderColor, dp(20), 1)
+            setPadding(dp(16), dp(14), dp(16), dp(14))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, 0, dp(12))
+            }
+            if (isDead) alpha = 0.65f
         }
 
-        val row = LinearLayout(this).apply {
+        val topRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
 
-        val indexChip = TextView(this).apply {
-            text = "$idx"
+        val numChip = TextView(this).apply {
+            text = item.index.toString()
+            setTextColor(Color.parseColor(TXT_SEC))
+            textSize = 10f
+            typeface = Typeface.MONOSPACE
             gravity = Gravity.CENTER
-            setTextColor(Color.parseColor(if (item.ping > 0) "#C084FC" else C_DIM))
-            textSize = 10.5f
-            typeface = uiFont(true)
-            background = createCard("#1A1230", if (item.ping > 0) C_VIOLET else C_STROKE_2, dp(10), 1)
-            layoutParams = LinearLayout.LayoutParams(dp(30), dp(30)).apply { setMargins(0, 0, dp(10), 0) }
+            val s = dp(30)
+            layoutParams = LinearLayout.LayoutParams(s, s).apply { setMargins(0, 0, dp(12), 0) }
+            background = createShape(CARD_SURFACE_SEC, STROKE_PRI, dp(10), 1)
         }
 
         val infoCol = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
         }
-
-        val remark = TextView(this).apply {
+        val remarkText = TextView(this).apply {
             text = item.remark
-            setTextColor(Color.parseColor(C_TEXT))
-            textSize = 13.5f
-            typeface = uiFont(true)
+            setTextColor(Color.parseColor(TXT_PRI))
+            textSize = 13f
+            typeface = Typeface.DEFAULT_BOLD
             maxLines = 1
         }
-
-        val hostLine = TextView(this).apply {
+        val ipPortText = TextView(this).apply {
             text = "${item.server}:${item.port}"
-            setTextColor(Color.parseColor(C_MUTED))
+            setTextColor(Color.parseColor(TXT_MUTED))
             textSize = 10f
             typeface = Typeface.MONOSPACE
-            maxLines = 1
-            setPadding(0, dp(3), 0, 0)
+            setPadding(0, dp(2), 0, 0)
         }
+        infoCol.addView(remarkText)
+        infoCol.addView(ipPortText)
 
-        infoCol.addView(remark)
-        infoCol.addView(hostLine)
-
-        val badgeCol = LinearLayout(this).apply {
+        val statusCol = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            gravity = Gravity.END
+            gravity = Gravity.CENTER_HORIZONTAL
         }
 
-        val status = TextView(this).apply {
-            text = if (item.ping > 0) "${item.ping}ms | ${item.stateText}" else item.stateText
-            setTextColor(Color.parseColor(pingColor(item.ping)))
-            textSize = 11f
-            typeface = uiFont(true)
-            background = createCard(pingBg(item.ping), pingColor(item.ping), dp(20), 1)
-            setPadding(dp(10), dp(5), dp(10), dp(5))
+        val pingBadge = TextView(this).apply {
+            text = getPingText(item.ping, isBest)
+            setTextColor(Color.parseColor(getPingColor(item.ping)))
+            textSize = 10.5f
+            typeface = Typeface.DEFAULT_BOLD
+            background = createShape(CARD_SURFACE_SEC, getPingColor(item.ping), dp(20), 1)
+            setPadding(dp(9), dp(3), dp(9), dp(3))
         }
 
-        badgeCol.addView(status)
-        if (item.ping > 0) {
-            val bars = signalBars(item.ping)
-            (bars.layoutParams as LinearLayout.LayoutParams).setMargins(0, dp(6), dp(2), 0)
-            badgeCol.addView(bars)
-        }
+        val signalBar = createSignalBar(item.ping)
+        statusCol.addView(pingBadge)
+        statusCol.addView(signalBar)
 
-        row.addView(indexChip)
-        row.addView(infoCol)
-        row.addView(badgeCol)
-        card.addView(row)
+        topRow.addView(numChip)
+        topRow.addView(infoCol)
+        topRow.addView(statusCol)
+        card.addView(topRow)
 
-        val chipRow = LinearLayout(this).apply {
+        card.addView(createDivider())
+
+        // چیپ‌های فنی و دکمه کپی تمام‌عرض
+        val tagsRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(0, dp(11), 0, 0)
+            setPadding(0, dp(8), 0, dp(8))
         }
-        chipRow.addView(miniChip(item.protocol.uppercase(), C_VIOLET, "#1B1030"))
-        chipRow.addView(miniChip("ICMP TEST", "#67E8F9", "#0C1B26"))
-        card.addView(chipRow)
-        card.addView(divider())
+        tagsRow.addView(createTagChip(item.protocol))
+        tagsRow.addView(createTagChip("ICMP TEST"))
+        card.addView(tagsRow)
 
         val copyBtn = Button(this).apply {
-            text = "⧉  کپی کانفیگ شادوساکس"
+            text = "کپی کانفیگ شادوساکس"
             setTextColor(Color.WHITE)
             textSize = 12f
-            typeface = uiFont(true)
-            background = ripple(
-                gradient(arrayOf(C_VIOLET, C_PINK), dp(12), GradientDrawable.Orientation.LEFT_RIGHT), "#FFFFFF"
-            )
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44))
-                .apply { setMargins(0, dp(10), 0, 0) }
-            polish()
-            pressScale(this)
-            setOnClickListener { copyClip(item.config, "کانفیگ کپی شد") }
+            typeface = Typeface.DEFAULT_BOLD
+            background = createGradient(ACC_PURPLE, ACC_PINK, dp(12), 0, "")
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42))
+            setOnClickListener {
+                animateClick(this)
+                copyToClipboard(item.config, "کانفیگ شادوساکس کپی شد")
+            }
         }
         card.addView(copyBtn)
 
         return card
     }
 
-    // ================= موتور تست (منطق دست‌نخورده) =================
-    private fun runPingEngine() {
-        testActionBtn.isEnabled = false
-        testActionBtn.alpha = 0.65f
-        showLoading(true)
-        infoStatusText.text = "در حال پینگ دقیق سرورها..."
+    // ================= نشانگر ۴ خانه‌ای سیگنال شبکه =================
+    private fun createSignalBar(ping: Int): LinearLayout {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(0, dp(4), 0, 0)
 
-        val executor = Executors.newFixedThreadPool(12)
+            val activeBars = when {
+                ping in 1..140 -> 4
+                ping in 141..280 -> 3
+                ping in 281..500 -> 2
+                ping > 500 -> 1
+                else -> 0
+            }
+            val activeColor = getPingColor(ping)
+
+            for (b in 1..4) {
+                val bar = View(this@MainActivity).apply {
+                    val w = dp(5)
+                    val h = dp(4 + b * 2)
+                    layoutParams = LinearLayout.LayoutParams(w, h).apply {
+                        setMargins(dp(1), 0, dp(1), 0)
+                        gravity = Gravity.BOTTOM
+                    }
+                    val col = if (b <= activeBars) activeColor else "#1C2438"
+                    background = createShape(col, col, dp(2), 0)
+                }
+                addView(bar)
+            }
+        }
+    }
+
+    private fun createTagChip(title: String): TextView {
+        return TextView(this).apply {
+            text = title
+            setTextColor(Color.parseColor(TXT_MUTED))
+            textSize = 9f
+            typeface = Typeface.MONOSPACE
+            background = createShape(CARD_SURFACE_SEC, STROKE_PRI, dp(6), 1)
+            setPadding(dp(6), dp(2), dp(6), dp(2))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                setMargins(0, 0, dp(6), 0)
+            }
+        }
+    }
+
+    private fun createDivider(): View {
+        return View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1)).apply {
+                setMargins(0, dp(10), 0, 0)
+            }
+            background = createGradient("#001E2637", STROKE_PRI, 0, 0, "")
+        }
+    }
+
+    // ================= موتور تست پینگ =================
+    private fun executeSmartPingTest() {
+        actionBtn.isEnabled = false
+        actionBtn.alpha = 0.65f
+        actionBtn.text = "در حال تست و مرتب‌سازی..."
+        loadingProgressBar.visibility = View.VISIBLE
+
+        val executor = Executors.newFixedThreadPool(14)
 
         thread {
             if (activeTab == 0) {
-                for (item in proxyItems) {
+                for (item in allProxies) {
                     executor.execute {
-                        val p = probeTelegramSocket(item.server, item.port)
-                        item.ping = p
-                        item.stateText = if (p > 0) calculateSpeedLabel(p) else "قطع ❌"
+                        item.ping = probeTelegramPing(item.server, item.port)
                     }
                 }
             } else {
-                val count = Math.min(v2rayItems.size, 100)
-                for (i in 0 until count) {
-                    val item = v2rayItems[i]
+                val limit = Math.min(allV2rays.size, 100)
+                for (i in 0 until limit) {
+                    val item = allV2rays[i]
                     executor.execute {
-                        val p = linuxIcmpPing(item.server)
-                        item.ping = p
-                        item.stateText = if (p > 0) calculateSpeedLabel(p) else "قطع ❌"
+                        item.ping = linuxIcmpPing(item.server)
                     }
                 }
             }
@@ -716,23 +843,26 @@ class MainActivity : AppCompatActivity() {
                 Thread.sleep(60)
             }
 
+            // مرتب‌سازی هوشمند: سالم‌ترین‌ها در صدر
             if (activeTab == 0) {
-                proxyItems.sortBy { if (it.ping <= 0) 999999 else it.ping }
+                allProxies.sortBy { if (it.ping <= 0) 999999 else it.ping }
             } else {
-                v2rayItems.sortBy { if (it.ping <= 0) 999999 else it.ping }
+                allV2rays.sortBy { if (it.ping <= 0) 999999 else it.ping }
             }
 
             runOnUiThread {
-                testActionBtn.isEnabled = true
-                testActionBtn.alpha = 1f
-                showLoading(false)
-                infoStatusText.text = "پینگ‌گیری تمام شد (سرورهای قطع به انتهای لیست رفتند)"
-                renderListView()
+                actionBtn.isEnabled = true
+                actionBtn.alpha = 1f
+                actionBtn.text = "⚡ تست و اعتبارسنجی دقیق پینگ"
+                loadingProgressBar.visibility = View.INVISIBLE
+                statusDescText.text = "تست پایان یافت. سرورهای سالم مرتب شدند."
+                updateStatsCounters()
+                renderFilteredList()
             }
         }
     }
 
-    private fun probeTelegramSocket(host: String, port: Int): Int {
+    private fun probeTelegramPing(host: String, port: Int): Int {
         if (host.isEmpty() || port <= 0) return -2
         var total = 0
         var ok = 0
@@ -742,12 +872,10 @@ class MainActivity : AppCompatActivity() {
                 sock.tcpNoDelay = true
                 val start = System.currentTimeMillis()
                 sock.connect(InetSocketAddress(host, port), 1200)
-                val diff = (System.currentTimeMillis() - start).toInt()
+                total += (System.currentTimeMillis() - start).toInt()
                 sock.close()
-                total += diff
                 ok++
-            } catch (e: Exception) {
-            }
+            } catch (e: Exception) {}
         }
         return if (ok > 0) total / ok else -2
     }
@@ -765,9 +893,7 @@ class MainActivity : AppCompatActivity() {
                 val l = line!!.lowercase()
                 if (l.contains("min/avg") || (l.contains("rtt") && l.contains("/"))) {
                     val parts = l.substringAfter("=").trim().split("/")
-                    if (parts.size >= 2) {
-                        avgMs = parts[1].trim().toFloat().toInt()
-                    }
+                    if (parts.size >= 2) avgMs = parts[1].trim().toFloat().toInt()
                 }
             }
             val exitCode = process.waitFor()
@@ -777,217 +903,63 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun calculateSpeedLabel(pingMs: Int): String {
+    // ================= کمک‌کننده‌ها =================
+    private fun getPingText(ping: Int, isBest: Boolean): String {
         return when {
-            pingMs in 1..140 -> "بسیار سریع ⚡"
-            pingMs in 141..280 -> "خوب"
-            else -> "متوسط"
+            isBest -> "👑 ${ping}ms"
+            ping > 0 -> "${ping}ms"
+            ping == -2 -> "قطع"
+            else -> "تست‌نشده"
         }
     }
 
-    private fun copyClip(payload: String, msg: String) {
-        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        cm.setPrimaryClip(ClipData.newPlainText("Data", payload))
-        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-    }
-
-    // ==================== DESIGN TOOLKIT ====================
-    private fun createCard(bgColor: String, borderColor: String, radius: Int, strokeWidth: Int): GradientDrawable {
-        val base = Color.parseColor(bgColor)
-        return GradientDrawable().apply {
-            gradientType = GradientDrawable.LINEAR_GRADIENT
-            orientation = GradientDrawable.Orientation.TOP_BOTTOM
-            colors = intArrayOf(shade(base, 0.10f), base, shade(base, -0.06f))
-            if (strokeWidth > 0) setStroke(maxOf(strokeWidth, dp(1)), Color.parseColor(borderColor))
-            cornerRadius = radius.toFloat()
+    private fun getPingColor(ping: Int): String {
+        return when {
+            ping in 1..140 -> STAT_HEALTHY
+            ping in 141..280 -> STAT_MEDIUM
+            ping in 281..500 -> STAT_WEAK
+            ping > 500 || ping == -2 -> STAT_DEAD
+            else -> TXT_MUTED
         }
     }
 
-    private fun gradient(hexList: Array<String>, radius: Int, o: GradientDrawable.Orientation): GradientDrawable {
-        return GradientDrawable().apply {
-            orientation = o
-            colors = hexList.map { Color.parseColor(it) }.toIntArray()
-            cornerRadius = radius.toFloat()
-        }
-    }
-
-    private fun solid(hex: String, radius: Int): GradientDrawable = GradientDrawable().apply {
-        setColor(Color.parseColor(hex))
-        cornerRadius = radius.toFloat()
-    }
-
-    private fun ripple(content: Drawable, rippleHex: String): Drawable {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            RippleDrawable(ColorStateList.valueOf(withAlpha(rippleHex, 0.22f)), content, null)
-        } else content
-    }
-
-    private fun withAlpha(hex: String, a: Float): Int {
-        val c = Color.parseColor(hex)
-        return Color.argb((255 * a).toInt(), Color.red(c), Color.green(c), Color.blue(c))
-    }
-
-    private fun shade(color: Int, f: Float): Int {
-        fun ch(v: Int): Int {
-            val delta = if (f > 0) (255 - v) * f else v * f
-            return (v + delta).toInt().coerceIn(0, 255)
-        }
-        return Color.rgb(ch(Color.red(color)), ch(Color.green(color)), ch(Color.blue(color)))
-    }
-
-    private fun glow(v: View, hex: String, e: Int) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) v.elevation = dp(e).toFloat()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            v.outlineSpotShadowColor = Color.parseColor(hex)
-            v.outlineAmbientShadowColor = Color.parseColor(hex)
-        }
-    }
-
-    private fun Button.polish() {
-        isAllCaps = false
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) stateListAnimator = null
-        minWidth = 0
-        minHeight = 0
-        setPadding(dp(8), 0, dp(8), 0)
-    }
-
-    private fun pressScale(v: View) {
-        v.setOnTouchListener { view, ev ->
-            when (ev.action) {
-                MotionEvent.ACTION_DOWN ->
-                    view.animate().scaleX(0.96f).scaleY(0.94f).setDuration(90).start()
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
-                    view.animate().scaleX(1f).scaleY(1f).setDuration(140).start()
-            }
-            false
-        }
-    }
-
-    private fun pulse(v: View) {
-        val a = AlphaAnimation(1f, 0.25f).apply {
-            duration = 850
-            repeatMode = Animation.REVERSE
-            repeatCount = Animation.INFINITE
-        }
-        v.startAnimation(a)
-    }
-
-    private fun enterAnim(v: View, index: Int) {
-        v.alpha = 0f
-        v.translationY = dp(20).toFloat()
-        v.animate()
-            .alpha(1f).translationY(0f)
-            .setStartDelay((index * 32L).coerceAtMost(520L))
-            .setDuration(330)
+    private fun animateEntrance(view: View, index: Int) {
+        view.alpha = 0f
+        view.translationY = dp(20).toFloat()
+        val delay = Math.min(index * 32L, 480L)
+        view.animate()
+            .alpha(1f)
+            .translationY(0f)
+            .setStartDelay(delay)
+            .setDuration(320)
             .setInterpolator(DecelerateInterpolator())
             .start()
     }
 
-    private fun buildLoadingBar(): LinearLayout {
-        loadingTrack = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            background = solid(C_SURF_2, dp(3))
-            visibility = View.GONE
-            weightSum = 1f
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(4))
-                .apply { setMargins(0, dp(12), 0, 0) }
-        }
-        loadingThumb = View(this).apply {
-            background = gradient(arrayOf(C_CYAN, C_BLUE), dp(3), GradientDrawable.Orientation.LEFT_RIGHT)
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 0.35f)
-        }
-        loadingTrack.addView(loadingThumb)
-        return loadingTrack
+    private fun animateClick(view: View) {
+        view.animate().scaleX(0.96f).scaleY(0.96f).setDuration(70).withEndAction {
+            view.animate().scaleX(1f).scaleY(1f).setDuration(120).start()
+        }.start()
     }
 
-    private fun showLoading(show: Boolean) {
-        loadingTrack.visibility = if (show) View.VISIBLE else View.GONE
-        if (show) {
-            loadingTrack.post {
-                val dist = loadingTrack.width * 0.65f
-                loadAnim?.cancel()
-                loadAnim = ObjectAnimator.ofFloat(loadingThumb, "translationX", 0f, dist).apply {
-                    duration = 900
-                    repeatCount = ObjectAnimator.INFINITE
-                    repeatMode = ObjectAnimator.REVERSE
-                    interpolator = AccelerateDecelerateInterpolator()
-                    start()
-                }
-            }
-        } else {
-            loadAnim?.cancel()
-            loadAnim = null
-            loadingThumb.translationX = 0f
+    private fun copyToClipboard(payload: String, toastMsg: String) {
+        val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText("Payload", payload))
+        Toast.makeText(this, toastMsg, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun createShape(bgColor: String, strokeColor: String, radius: Int, strokeWidth: Int): GradientDrawable {
+        return GradientDrawable().apply {
+            setColor(Color.parseColor(bgColor))
+            if (strokeWidth > 0) setStroke(strokeWidth, Color.parseColor(strokeColor))
+            cornerRadius = radius.toFloat()
         }
     }
 
-    private fun divider(): View = View(this).apply {
-        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(1))
-            .apply { setMargins(0, dp(12), 0, 0) }
-        background = gradient(arrayOf("#00000000", C_STROKE_2, "#00000000"), 0, GradientDrawable.Orientation.LEFT_RIGHT)
-    }
-
-    private fun miniChip(txt: String, fg: String, bg: String): TextView = TextView(this).apply {
-        text = txt
-        setTextColor(Color.parseColor(fg))
-        textSize = 8.5f
-        typeface = uiFont(true)
-        background = createCard(bg, fg, dp(20), 1)
-        setPadding(dp(9), dp(4), dp(9), dp(4))
-        layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply { setMargins(0, 0, dp(6), 0) }
-    }
-
-    private fun signalBars(ping: Int): View {
-        val strength = when {
-            ping <= 0 -> 0
-            ping <= 140 -> 4
-            ping <= 280 -> 3
-            ping <= 500 -> 2
-            else -> 1
-        }
-        val active = pingColor(ping)
-        return LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.BOTTOM
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
-            )
-            for (i in 1..4) {
-                addView(View(this@MainActivity).apply {
-                    background = solid(if (i <= strength) active else C_STROKE_2, dp(2))
-                    layoutParams = LinearLayout.LayoutParams(dp(3), dp(3 + i * 3))
-                        .apply { setMargins(dp(1), 0, dp(1), 0) }
-                })
-            }
-        }
-    }
-
-    private fun pingColor(ping: Int): String = when {
-        ping == -2 -> C_RED
-        ping <= 0 -> C_DIM
-        ping <= 140 -> C_GREEN
-        ping <= 280 -> C_AMBER
-        else -> "#FB923C"
-    }
-
-    private fun pingBg(ping: Int): String = when {
-        ping == -2 -> "#2A0E17"
-        ping <= 0 -> C_SURF_2
-        ping <= 140 -> "#0C2119"
-        ping <= 280 -> "#251C08"
-        else -> "#2A1608"
-    }
-
-    private fun uiFont(bold: Boolean): Typeface {
-        return try {
-            Typeface.createFromAsset(
-                assets,
-                if (bold) "fonts/Vazirmatn-Bold.ttf" else "fonts/Vazirmatn-Regular.ttf"
-            )
-        } catch (e: Exception) {
-            if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+    private fun createGradient(startCol: String, endCol: String, radius: Int, strokeWidth: Int, strokeCol: String): GradientDrawable {
+        return GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(Color.parseColor(startCol), Color.parseColor(endCol))).apply {
+            if (strokeWidth > 0 && strokeCol.isNotEmpty()) setStroke(strokeWidth, Color.parseColor(strokeCol))
+            cornerRadius = radius.toFloat()
         }
     }
 }
