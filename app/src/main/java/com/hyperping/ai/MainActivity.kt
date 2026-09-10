@@ -1,7 +1,5 @@
 package com.hyperping.ai
 
-import android.animation.ObjectAnimator
-import android.animation.ValueAnimator
 import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -12,8 +10,6 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
-import android.text.Editable
-import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.animation.AlphaAnimation
@@ -53,10 +49,10 @@ class MainActivity : Activity() {
     private val ACC_PINK = "#EC4899"
 
     // وضعیت‌ها
-    private val STAT_HEALTHY = "#34D399" // زیر 140
-    private val STAT_MEDIUM = "#FBBF24"  // 141 - 280
-    private val STAT_WEAK = "#FB923C"    // 281 - 500
-    private val STAT_DEAD = "#FB4E6D"    // بالای 500 یا ناموفق
+    private val STAT_HEALTHY = "#34D399"
+    private val STAT_MEDIUM = "#FBBF24"
+    private val STAT_WEAK = "#FB923C"
+    private val STAT_DEAD = "#FB4E6D"
 
     data class ProxyItem(val server: String, val port: Int, val secret: String, val tgLink: String, var ping: Int = -1, var index: Int = 0)
     data class V2rayItem(val config: String, val protocol: String, val server: String, val port: Int, val remark: String, var ping: Int = -1, var index: Int = 0)
@@ -65,8 +61,6 @@ class MainActivity : Activity() {
     private val allV2rays = ArrayList<V2rayItem>()
 
     private var activeTab = 0 // 0 = Telegram, 1 = Shadowsocks
-    private var activeFilter = 0 // 0=All, 1=Healthy, 2=Fast, 3=Dead
-    private var searchQuery = ""
 
     private lateinit var contentListLayout: LinearLayout
     private lateinit var tabTgBtn: TextView
@@ -75,9 +69,8 @@ class MainActivity : Activity() {
     private lateinit var actionBtn: Button
     private lateinit var statusDescText: TextView
     private lateinit var loadingProgressBar: View
-    private lateinit var filterChips: ArrayList<TextView>
 
-    // شمارنده‌های اکشن‌کارت
+    // شمارنده‌های آمار
     private lateinit var countTotalVal: TextView
     private lateinit var countHealthyVal: TextView
     private lateinit var countBestVal: TextView
@@ -99,10 +92,12 @@ class MainActivity : Activity() {
             layoutDirection = View.LAYOUT_DIRECTION_RTL
         }
 
-        // ================= ۱. هدر لوکس با آیکون گرادینتی و چراغ نبض‌دار =================
-        val header = RelativeLayout(this).apply {
+        // ================= ۱. هدر بدون تداخل با چیدمان افقی و منظم =================
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(Color.parseColor(BG_HEADER))
             setPadding(dp(16), dp(14), dp(16), dp(14))
+            gravity = Gravity.CENTER_VERTICAL
         }
 
         val brandBox = LinearLayout(this).apply {
@@ -117,7 +112,7 @@ class MainActivity : Activity() {
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             val size = dp(34)
-            layoutParams = LinearLayout.LayoutParams(size, size).apply { setMargins(0, 0, dp(12), 0) }
+            layoutParams = LinearLayout.LayoutParams(size, size).apply { setMargins(0, 0, dp(10), 0) }
             background = createGradient(ACC_CYAN, ACC_PURPLE, dp(10), 0, "")
         }
 
@@ -125,7 +120,7 @@ class MainActivity : Activity() {
         val appName = TextView(this).apply {
             text = "HYPER CORE"
             setTextColor(Color.parseColor(TXT_PRI))
-            textSize = 16.5f
+            textSize = 16f
             typeface = Typeface.DEFAULT_BOLD
         }
         val subTech = TextView(this).apply {
@@ -133,8 +128,8 @@ class MainActivity : Activity() {
             setTextColor(Color.parseColor(TXT_MUTED))
             textSize = 8.5f
             typeface = Typeface.MONOSPACE
-            letterSpacing = 0.12f
-            setPadding(0, dp(2), 0, 0)
+            letterSpacing = 0.1f
+            setPadding(0, dp(1), 0, 0)
         }
         titleCol.addView(appName)
         titleCol.addView(subTech)
@@ -142,20 +137,22 @@ class MainActivity : Activity() {
         brandBox.addView(titleCol)
         header.addView(brandBox)
 
-        // قرص وضعیت ONLINE با انیمیشن آلفای بی‌نهایت
+        // ایجاد فاصله خودکار بین عنوان و برچسب آنلاین
+        val spacer = View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(0, 1, 1f)
+        }
+        header.addView(spacer)
+
+        // قرص وضعیت ONLINE کاملاً در سمت چپ و بدون هیچ تداخلی
         val onlinePill = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             background = createShape(CARD_SURFACE_SEC, STROKE_PRI, dp(20), 1)
-            setPadding(dp(10), dp(5), dp(12), dp(5))
-            val p = RelativeLayout.LayoutParams(RelativeLayout.LayoutParams.WRAP_CONTENT, RelativeLayout.LayoutParams.WRAP_CONTENT)
-            p.addRule(RelativeLayout.ALIGN_PARENT_LEFT)
-            p.addRule(RelativeLayout.CENTER_VERTICAL)
-            layoutParams = p
+            setPadding(dp(10), dp(5), dp(10), dp(5))
         }
 
         val pulseDot = View(this).apply {
-            val s = dp(8)
+            val s = dp(7)
             layoutParams = LinearLayout.LayoutParams(s, s).apply { setMargins(0, 0, dp(6), 0) }
             background = createShape(STAT_HEALTHY, STAT_HEALTHY, dp(10), 0)
             val anim = AlphaAnimation(0.25f, 1.0f).apply {
@@ -168,7 +165,7 @@ class MainActivity : Activity() {
         val onlineText = TextView(this).apply {
             text = "ONLINE"
             setTextColor(Color.parseColor(TXT_PRI))
-            textSize = 10f
+            textSize = 9.5f
             typeface = Typeface.DEFAULT_BOLD
             letterSpacing = 0.1f
         }
@@ -178,7 +175,7 @@ class MainActivity : Activity() {
 
         root.addView(header)
 
-        // خط ۲dp گرادینت لهجه زیر هدر
+        // خط ۲dp گرادینت زیر هدر
         accentLine = View(this).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(2))
             background = createGradient(ACC_CYAN, ACC_BLUE, 0, 0, "")
@@ -202,17 +199,16 @@ class MainActivity : Activity() {
         tabContainer.addView(tabV2Btn)
         root.addView(tabContainer)
 
-        // ================= ۳. کارت اکشن و شمارنده‌های ۳ گانه =================
+        // ================= ۳. کارت اکشن و شمارنده‌ها =================
         val actionCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = createShape(CARD_SURFACE, STROKE_PRI, dp(20), 1)
             setPadding(dp(16), dp(14), dp(16), dp(14))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                setMargins(dp(16), dp(4), dp(16), dp(10))
+                setMargins(dp(16), dp(4), dp(16), dp(12))
             }
         }
 
-        // ردیف آمار (تعداد کل | سالم | بهترین پینگ)
         val statsRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             weightSum = 3f
@@ -226,7 +222,6 @@ class MainActivity : Activity() {
         countBestVal = createStatColumn(statsRow, "بهترین پینگ", "---", ACC_CYAN)
         actionCard.addView(statsRow)
 
-        // نوار لودینگ باریک ۴dp
         loadingProgressBar = View(this).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(4)).apply {
                 setMargins(0, dp(4), 0, dp(10))
@@ -244,7 +239,6 @@ class MainActivity : Activity() {
         }
         actionCard.addView(statusDescText)
 
-        // دکمه اصلی ۵۰dp با انیمیشن ریپل و کلیک
         actionBtn = Button(this).apply {
             text = "⚡ تست و اعتبارسنجی دقیق پینگ"
             textSize = 13.5f
@@ -260,66 +254,7 @@ class MainActivity : Activity() {
         actionCard.addView(actionBtn)
         root.addView(actionCard)
 
-        // ================= ۴. فیلد جستجو و چیپ‌های فیلتر =================
-        val searchBox = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            background = createShape(CARD_SURFACE_SEC, STROKE_PRI, dp(14), 1)
-            setPadding(dp(14), dp(8), dp(14), dp(8))
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                setMargins(dp(16), 0, dp(16), dp(8))
-            }
-            gravity = Gravity.CENTER_VERTICAL
-        }
-
-        val searchInput = EditText(this).apply {
-            hint = "جستجوی سرور، آی‌پی، موقعیت..."
-            setHintTextColor(Color.parseColor(TXT_MUTED))
-            setTextColor(Color.parseColor(TXT_PRI))
-            textSize = 12.5f
-            background = null
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-            addTextChangedListener(object : TextWatcher {
-                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
-                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
-                    searchQuery = s.toString().trim().lowercase()
-                    renderFilteredList()
-                }
-                override fun afterTextChanged(s: Editable?) {}
-            })
-        }
-        searchBox.addView(searchInput)
-        root.addView(searchBox)
-
-        // چیپ‌های فیلتر ("همه", "سالم", "سریع", "قطع")
-        val chipsRow = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            setPadding(dp(16), 0, dp(16), dp(8))
-        }
-
-        filterChips = ArrayList()
-        val chipNames = listOf("همه", "سالم", "سریع (<150ms)", "قطع")
-        for (i in chipNames.indices) {
-            val chip = TextView(this).apply {
-                text = chipNames[i]
-                textSize = 10.5f
-                typeface = Typeface.DEFAULT_BOLD
-                setPadding(dp(12), dp(6), dp(12), dp(6))
-                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
-                    setMargins(0, 0, dp(8), 0)
-                }
-                setOnClickListener {
-                    activeFilter = i
-                    updateFilterChipsUI()
-                    renderFilteredList()
-                }
-            }
-            filterChips.add(chip)
-            chipsRow.addView(chip)
-        }
-        root.addView(chipsRow)
-        updateFilterChipsUI()
-
-        // ================= ۵. لیست اسکرول آیتم‌ها =================
+        // ================= ۴. لیست اسکرول آیتم‌ها (بدون بخش جستجو) =================
         val scroller = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
             overScrollMode = View.OVER_SCROLL_NEVER
@@ -347,7 +282,7 @@ class MainActivity : Activity() {
                 if (activeTab != tabIndex) {
                     activeTab = tabIndex
                     updateActiveTabVisuals()
-                    renderFilteredList()
+                    renderCardsList()
                 }
             }
         }
@@ -374,20 +309,6 @@ class MainActivity : Activity() {
             countBestVal.setTextColor(Color.parseColor(ACC_PURPLE))
         }
         updateStatsCounters()
-    }
-
-    private fun updateFilterChipsUI() {
-        for (i in filterChips.indices) {
-            val chip = filterChips[i]
-            if (i == activeFilter) {
-                chip.setTextColor(Color.parseColor(TXT_PRI))
-                val color = if (activeTab == 0) ACC_CYAN else ACC_PURPLE
-                chip.background = createShape(CARD_SURFACE_SEC, color, dp(20), 1)
-            } else {
-                chip.setTextColor(Color.parseColor(TXT_MUTED))
-                chip.background = createShape("#090C16", STROKE_PRI, dp(20), 1)
-            }
-        }
     }
 
     private fun createStatColumn(parent: LinearLayout, label: String, initialVal: String, valColor: String = TXT_PRI): TextView {
@@ -421,7 +342,7 @@ class MainActivity : Activity() {
         }
     }
 
-    // ================= دریافت اطلاعات از سرور =================
+    // ================= دریافت اطلاعات سرور =================
     private fun fetchCloudData() {
         thread {
             try {
@@ -444,7 +365,7 @@ class MainActivity : Activity() {
                 runOnUiThread {
                     statusDescText.text = "مخزن بروز است. سرورها آماده تست و اتصال می‌باشند."
                     updateStatsCounters()
-                    renderFilteredList()
+                    renderCardsList()
                 }
             } catch (e: Exception) {
                 runOnUiThread {
@@ -482,8 +403,8 @@ class MainActivity : Activity() {
         }
     }
 
-    // ================= فیلتر و رندر پله‌ای کارت‌ها =================
-    private fun renderFilteredList() {
+    // ================= رندر مستقیم لیست آیتم‌ها =================
+    private fun renderCardsList() {
         contentListLayout.removeAllViews()
 
         val bestPing = if (activeTab == 0) {
@@ -493,44 +414,21 @@ class MainActivity : Activity() {
         }
 
         if (activeTab == 0) {
-            val filtered = allProxies.filter {
-                val matchSearch = searchQuery.isEmpty() || it.server.contains(searchQuery) || it.port.toString().contains(searchQuery)
-                val matchFilter = when (activeFilter) {
-                    1 -> it.ping in 1..500
-                    2 -> it.ping in 1..150
-                    3 -> it.ping == -2
-                    else -> true
-                }
-                matchSearch && matchFilter
-            }
-
-            for (i in filtered.indices) {
-                val card = buildProxyCard(filtered[i], filtered[i].ping == bestPing && bestPing > 0)
+            for (i in allProxies.indices) {
+                val card = buildProxyCard(allProxies[i], allProxies[i].ping == bestPing && bestPing > 0)
                 contentListLayout.addView(card)
                 animateEntrance(card, i)
             }
         } else {
-            val filtered = allV2rays.filter {
-                val matchSearch = searchQuery.isEmpty() || it.server.contains(searchQuery) || it.remark.lowercase().contains(searchQuery)
-                val matchFilter = when (activeFilter) {
-                    1 -> it.ping in 1..500
-                    2 -> it.ping in 1..150
-                    3 -> it.ping == -2
-                    else -> true
-                }
-                matchSearch && matchFilter
-            }
-
-            val count = Math.min(filtered.size, 100)
+            val count = Math.min(allV2rays.size, 100)
             for (i in 0 until count) {
-                val card = buildV2rayCard(filtered[i], filtered[i].ping == bestPing && bestPing > 0)
+                val card = buildV2rayCard(allV2rays[i], allV2rays[i].ping == bestPing && bestPing > 0)
                 contentListLayout.addView(card)
                 animateEntrance(card, i)
             }
         }
     }
 
-    // ================= کارت پروکسی تلگرام =================
     private fun buildProxyCard(item: ProxyItem, isBest: Boolean): View {
         val isDead = item.ping == -2
         val card = LinearLayout(this).apply {
@@ -545,13 +443,11 @@ class MainActivity : Activity() {
             if (isDead) alpha = 0.65f
         }
 
-        // ردیف بالا
         val topRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
 
-        // چیپ شماره ۳۰x۳۰
         val numChip = TextView(this).apply {
             text = item.index.toString()
             setTextColor(Color.parseColor(TXT_SEC))
@@ -563,7 +459,6 @@ class MainActivity : Activity() {
             background = createShape(CARD_SURFACE_SEC, STROKE_PRI, dp(10), 1)
         }
 
-        // ستون اطلاعات
         val infoCol = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
@@ -584,7 +479,6 @@ class MainActivity : Activity() {
         infoCol.addView(ipText)
         infoCol.addView(subProtocol)
 
-        // ستون پینگ و سیگنال ۴ تایی
         val statusCol = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
@@ -608,10 +502,8 @@ class MainActivity : Activity() {
         topRow.addView(statusCol)
         card.addView(topRow)
 
-        // جداکننده فید گرادینتی
         card.addView(createDivider())
 
-        // دکمه‌های پایین
         val btnRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, dp(10), 0, 0)
@@ -654,7 +546,6 @@ class MainActivity : Activity() {
         return card
     }
 
-    // ================= کارت شادوساکس V2Ray =================
     private fun buildV2rayCard(item: V2rayItem, isBest: Boolean): View {
         val isDead = item.ping == -2
         val card = LinearLayout(this).apply {
@@ -731,7 +622,6 @@ class MainActivity : Activity() {
 
         card.addView(createDivider())
 
-        // چیپ‌های فنی و دکمه کپی تمام‌عرض
         val tagsRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(0, dp(8), 0, dp(8))
@@ -757,7 +647,6 @@ class MainActivity : Activity() {
         return card
     }
 
-    // ================= نشانگر ۴ خانه‌ای سیگنال شبکه =================
     private fun createSignalBar(ping: Int): LinearLayout {
         return LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -812,7 +701,7 @@ class MainActivity : Activity() {
         }
     }
 
-    // ================= موتور تست پینگ =================
+    // ================= تست پینگ هوشمند =================
     private fun executeSmartPingTest() {
         actionBtn.isEnabled = false
         actionBtn.alpha = 0.65f
@@ -843,7 +732,6 @@ class MainActivity : Activity() {
                 Thread.sleep(60)
             }
 
-            // مرتب‌سازی هوشمند: سالم‌ترین‌ها در صدر
             if (activeTab == 0) {
                 allProxies.sortBy { if (it.ping <= 0) 999999 else it.ping }
             } else {
@@ -857,7 +745,7 @@ class MainActivity : Activity() {
                 loadingProgressBar.visibility = View.INVISIBLE
                 statusDescText.text = "تست پایان یافت. سرورهای سالم مرتب شدند."
                 updateStatsCounters()
-                renderFilteredList()
+                renderCardsList()
             }
         }
     }
@@ -903,7 +791,6 @@ class MainActivity : Activity() {
         }
     }
 
-    // ================= کمک‌کننده‌ها =================
     private fun getPingText(ping: Int, isBest: Boolean): String {
         return when {
             isBest -> "👑 ${ping}ms"
@@ -926,12 +813,12 @@ class MainActivity : Activity() {
     private fun animateEntrance(view: View, index: Int) {
         view.alpha = 0f
         view.translationY = dp(20).toFloat()
-        val delay = Math.min(index * 32L, 480L)
+        val delay = Math.min(index * 28L, 420L)
         view.animate()
             .alpha(1f)
             .translationY(0f)
             .setStartDelay(delay)
-            .setDuration(320)
+            .setDuration(300)
             .setInterpolator(DecelerateInterpolator())
             .start()
     }
