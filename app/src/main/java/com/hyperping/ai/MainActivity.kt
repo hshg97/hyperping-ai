@@ -29,9 +29,10 @@ import kotlin.concurrent.thread
 class MainActivity : Activity() {
 
     private val PROXY_URL = "https://p.sosiss.ir/data_proxy.json"
-    private val V2RAY_URL = "https://p.sosiss.ir/data_v2ray.json"
+    private val SS_URL    = "https://p.sosiss.ir/data_ss.json"
+    private val VLESS_URL = "https://p.sosiss.ir/data_vless.json"
 
-    // توکن‌های رنگی Aurora Dark
+    // تم دارک لوکس Aurora
     private val BG_DARK = "#04050A"
     private val BG_HEADER = "#080B14"
     private val CARD_SURFACE = "#0E1220"
@@ -42,35 +43,35 @@ class MainActivity : Activity() {
     private val TXT_SEC = "#8593AC"
     private val TXT_MUTED = "#5A6780"
 
-    // لهجه‌ها
-    private val ACC_CYAN = "#22D3EE"
-    private val ACC_BLUE = "#3B82F6"
-    private val ACC_PURPLE = "#A855F7"
-    private val ACC_PINK = "#EC4899"
+    // رنگ لهجه تب‌ها
+    private val ACC_CYAN = "#22D3EE"     // تب ۱: تلگرام
+    private val ACC_PURPLE = "#A855F7"   // تب ۲: شادوساکس
+    private val ACC_AMBER = "#F59E0B"    // تب ۳: وی‌لس و وی‌توری (طلایی لوکس)
 
-    // وضعیت‌ها
+    // وضعیت پینگ
     private val STAT_HEALTHY = "#34D399"
     private val STAT_MEDIUM = "#FBBF24"
     private val STAT_WEAK = "#FB923C"
     private val STAT_DEAD = "#FB4E6D"
 
     data class ProxyItem(val server: String, val port: Int, val secret: String, val tgLink: String, var ping: Int = -1, var index: Int = 0)
-    data class V2rayItem(val config: String, val protocol: String, val server: String, val port: Int, val remark: String, var ping: Int = -1, var index: Int = 0)
+    data class ServerItem(val config: String, val protocol: String, val server: String, val port: Int, val remark: String, var ping: Int = -1, var index: Int = 0)
 
-    private val allProxies = ArrayList<ProxyItem>()
-    private val allV2rays = ArrayList<V2rayItem>()
+    private val proxyList = ArrayList<ProxyItem>()
+    private val ssList    = ArrayList<ServerItem>()
+    private val vlessList = ArrayList<ServerItem>()
 
-    private var activeTab = 0 // 0 = Telegram, 1 = Shadowsocks
+    private var activeTab = 0 // 0=تلگرام, 1=شادوساکس, 2=VLESS
 
     private lateinit var contentListLayout: LinearLayout
     private lateinit var tabTgBtn: TextView
-    private lateinit var tabV2Btn: TextView
+    private lateinit var tabSsBtn: TextView
+    private lateinit var tabVlessBtn: TextView
     private lateinit var accentLine: View
     private lateinit var actionBtn: Button
     private lateinit var statusDescText: TextView
     private lateinit var loadingProgressBar: View
 
-    // شمارنده‌های آمار
     private lateinit var countTotalVal: TextView
     private lateinit var countHealthyVal: TextView
     private lateinit var countBestVal: TextView
@@ -79,20 +80,20 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         window.statusBarColor = Color.parseColor(BG_HEADER)
         window.navigationBarColor = Color.parseColor(BG_DARK)
-        buildAuroraInterface()
-        fetchCloudData()
+        buildThreeTabInterface()
+        fetchCloudRepositories()
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
-    private fun buildAuroraInterface() {
+    private fun buildThreeTabInterface() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(Color.parseColor(BG_DARK))
             layoutDirection = View.LAYOUT_DIRECTION_RTL
         }
 
-        // ================= ۱. هدر بدون تداخل با چیدمان افقی و منظم =================
+        // ================= ۱. هدر تمیز بدون تداخل =================
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             setBackgroundColor(Color.parseColor(BG_HEADER))
@@ -124,9 +125,9 @@ class MainActivity : Activity() {
             typeface = Typeface.DEFAULT_BOLD
         }
         val subTech = TextView(this).apply {
-            text = "PROXY · SHADOWSOCKS · PING LAB"
+            text = "PROXY · SHADOWSOCKS · VLESS LAB"
             setTextColor(Color.parseColor(TXT_MUTED))
-            textSize = 8.5f
+            textSize = 8f
             typeface = Typeface.MONOSPACE
             letterSpacing = 0.1f
             setPadding(0, dp(1), 0, 0)
@@ -137,20 +138,14 @@ class MainActivity : Activity() {
         brandBox.addView(titleCol)
         header.addView(brandBox)
 
-        // ایجاد فاصله خودکار بین عنوان و برچسب آنلاین
-        val spacer = View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(0, 1, 1f)
-        }
-        header.addView(spacer)
+        header.addView(View(this).apply { layoutParams = LinearLayout.LayoutParams(0, 1, 1f) })
 
-        // قرص وضعیت ONLINE کاملاً در سمت چپ و بدون هیچ تداخلی
         val onlinePill = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             background = createShape(CARD_SURFACE_SEC, STROKE_PRI, dp(20), 1)
             setPadding(dp(10), dp(5), dp(10), dp(5))
         }
-
         val pulseDot = View(this).apply {
             val s = dp(7)
             layoutParams = LinearLayout.LayoutParams(s, s).apply { setMargins(0, 0, dp(6), 0) }
@@ -175,31 +170,33 @@ class MainActivity : Activity() {
 
         root.addView(header)
 
-        // خط ۲dp گرادینت زیر هدر
         accentLine = View(this).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(2))
-            background = createGradient(ACC_CYAN, ACC_BLUE, 0, 0, "")
+            background = createGradient(ACC_CYAN, "#3B82F6", 0, 0, "")
         }
         root.addView(accentLine)
 
-        // ================= ۲. تب‌های قرصی شکل =================
+        // ================= ۲. کانتینر ۳ تبِ قرصی شکل =================
         val tabContainer = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             background = createShape("#0A0D18", STROKE_PRI, dp(22), 1)
-            setPadding(dp(5), dp(5), dp(5), dp(5))
+            setPadding(dp(4), dp(4), dp(4), dp(4))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(44)).apply {
                 setMargins(dp(16), dp(12), dp(16), dp(8))
             }
-            weightSum = 2f
+            weightSum = 3f
         }
 
-        tabTgBtn = createTabButton("پروکسی تلگرام (MTProto)", 0)
-        tabV2Btn = createTabButton("سرورهای شادوساکس (SS)", 1)
+        tabTgBtn    = createTabButton("تلگرام (MT)", 0)
+        tabSsBtn    = createTabButton("شادوساکس", 1)
+        tabVlessBtn = createTabButton("سرور VLESS", 2)
+
         tabContainer.addView(tabTgBtn)
-        tabContainer.addView(tabV2Btn)
+        tabContainer.addView(tabSsBtn)
+        tabContainer.addView(tabVlessBtn)
         root.addView(tabContainer)
 
-        // ================= ۳. کارت اکشن و شمارنده‌ها =================
+        // ================= ۳. کارت آمار و دکمه تست =================
         val actionCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = createShape(CARD_SURFACE, STROKE_PRI, dp(20), 1)
@@ -226,13 +223,13 @@ class MainActivity : Activity() {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(4)).apply {
                 setMargins(0, dp(4), 0, dp(10))
             }
-            background = createGradient(ACC_CYAN, ACC_BLUE, dp(2), 0, "")
+            background = createGradient(ACC_CYAN, "#3B82F6", dp(2), 0, "")
             visibility = View.INVISIBLE
         }
         actionCard.addView(loadingProgressBar)
 
         statusDescText = TextView(this).apply {
-            text = "مخزن در حال دریافت آخرین سرورها..."
+            text = "در حال بارگذاری مخازن سه‌گانه..."
             setTextColor(Color.parseColor(TXT_SEC))
             textSize = 12f
             setPadding(0, 0, 0, dp(10))
@@ -241,10 +238,10 @@ class MainActivity : Activity() {
 
         actionBtn = Button(this).apply {
             text = "⚡ تست و اعتبارسنجی دقیق پینگ"
-            textSize = 13.5f
+            textSize = 13f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.parseColor("#04050A"))
-            background = createGradient(ACC_CYAN, ACC_BLUE, dp(14), 0, "")
+            background = createGradient(ACC_CYAN, "#3B82F6", dp(14), 0, "")
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(50))
             setOnClickListener {
                 animateClick(this)
@@ -254,7 +251,7 @@ class MainActivity : Activity() {
         actionCard.addView(actionBtn)
         root.addView(actionCard)
 
-        // ================= ۴. لیست اسکرول آیتم‌ها (بدون بخش جستجو) =================
+        // ================= ۴. لیست اسکرول =================
         val scroller = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f)
             overScrollMode = View.OVER_SCROLL_NEVER
@@ -274,7 +271,7 @@ class MainActivity : Activity() {
     private fun createTabButton(title: String, tabIndex: Int): TextView {
         return TextView(this).apply {
             text = title
-            textSize = 11.5f
+            textSize = 11f
             typeface = Typeface.DEFAULT_BOLD
             gravity = Gravity.CENTER
             layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
@@ -289,24 +286,38 @@ class MainActivity : Activity() {
     }
 
     private fun updateActiveTabVisuals() {
-        if (activeTab == 0) {
-            tabTgBtn.setTextColor(Color.parseColor(TXT_PRI))
-            tabTgBtn.background = createShape(CARD_SURFACE_SEC, ACC_CYAN, dp(18), 1)
-            tabV2Btn.setTextColor(Color.parseColor(TXT_MUTED))
-            tabV2Btn.background = null
+        tabTgBtn.setTextColor(Color.parseColor(TXT_MUTED))
+        tabTgBtn.background = null
+        tabSsBtn.setTextColor(Color.parseColor(TXT_MUTED))
+        tabSsBtn.background = null
+        tabVlessBtn.setTextColor(Color.parseColor(TXT_MUTED))
+        tabVlessBtn.background = null
 
-            accentLine.background = createGradient(ACC_CYAN, ACC_BLUE, 0, 0, "")
-            actionBtn.background = createGradient(ACC_CYAN, ACC_BLUE, dp(14), 0, "")
-            countBestVal.setTextColor(Color.parseColor(ACC_CYAN))
-        } else {
-            tabV2Btn.setTextColor(Color.parseColor(TXT_PRI))
-            tabV2Btn.background = createShape(CARD_SURFACE_SEC, ACC_PURPLE, dp(18), 1)
-            tabTgBtn.setTextColor(Color.parseColor(TXT_MUTED))
-            tabTgBtn.background = null
-
-            accentLine.background = createGradient(ACC_PURPLE, ACC_PINK, 0, 0, "")
-            actionBtn.background = createGradient(ACC_PURPLE, ACC_PINK, dp(14), 0, "")
-            countBestVal.setTextColor(Color.parseColor(ACC_PURPLE))
+        when (activeTab) {
+            0 -> {
+                // تلگرام (سایان/آبی)
+                tabTgBtn.setTextColor(Color.parseColor(TXT_PRI))
+                tabTgBtn.background = createShape(CARD_SURFACE_SEC, ACC_CYAN, dp(18), 1)
+                accentLine.background = createGradient(ACC_CYAN, "#3B82F6", 0, 0, "")
+                actionBtn.background = createGradient(ACC_CYAN, "#3B82F6", dp(14), 0, "")
+                countBestVal.setTextColor(Color.parseColor(ACC_CYAN))
+            }
+            1 -> {
+                // شادوساکس (بنفش/صورتی)
+                tabSsBtn.setTextColor(Color.parseColor(TXT_PRI))
+                tabSsBtn.background = createShape(CARD_SURFACE_SEC, ACC_PURPLE, dp(18), 1)
+                accentLine.background = createGradient(ACC_PURPLE, "#EC4899", 0, 0, "")
+                actionBtn.background = createGradient(ACC_PURPLE, "#EC4899", dp(14), 0, "")
+                countBestVal.setTextColor(Color.parseColor(ACC_PURPLE))
+            }
+            2 -> {
+                // VLESS (طلایی/کهربایی لوکس)
+                tabVlessBtn.setTextColor(Color.parseColor(TXT_PRI))
+                tabVlessBtn.background = createShape(CARD_SURFACE_SEC, ACC_AMBER, dp(18), 1)
+                accentLine.background = createGradient(ACC_AMBER, "#EF4444", 0, 0, "")
+                actionBtn.background = createGradient(ACC_AMBER, "#EF4444", dp(14), 0, "")
+                countBestVal.setTextColor(Color.parseColor(ACC_AMBER))
+            }
         }
         updateStatsCounters()
     }
@@ -342,34 +353,45 @@ class MainActivity : Activity() {
         }
     }
 
-    // ================= دریافت اطلاعات سرور =================
-    private fun fetchCloudData() {
+    // ================= خواندن دیتا از هاست برای هر ۳ مخزن =================
+    private fun fetchCloudRepositories() {
         thread {
             try {
+                // ۱. تلگرام
                 val pStr = httpGet(PROXY_URL)
                 val pArr = JSONArray(pStr)
-                allProxies.clear()
+                proxyList.clear()
                 for (i in 0 until pArr.length()) {
                     val o = pArr.getJSONObject(i)
-                    allProxies.add(ProxyItem(o.optString("server"), o.optInt("port"), o.optString("secret"), o.optString("tg_link"), -1, i + 1))
+                    proxyList.add(ProxyItem(o.optString("server"), o.optInt("port"), o.optString("secret"), o.optString("tg_link"), -1, i + 1))
                 }
 
-                val vStr = httpGet(V2RAY_URL)
+                // ۲. شادوساکس
+                val sStr = httpGet(SS_URL)
+                val sArr = JSONArray(sStr)
+                ssList.clear()
+                for (i in 0 until sArr.length()) {
+                    val o = sArr.getJSONObject(i)
+                    ssList.add(ServerItem(o.optString("config"), o.optString("protocol", "SS"), o.optString("server"), o.optInt("port", 443), o.optString("remark", "Canada"), -1, i + 1))
+                }
+
+                // ۳. مخزن جدید VLESS
+                val vStr = httpGet(VLESS_URL)
                 val vArr = JSONArray(vStr)
-                allV2rays.clear()
+                vlessList.clear()
                 for (i in 0 until vArr.length()) {
                     val o = vArr.getJSONObject(i)
-                    allV2rays.add(V2rayItem(o.optString("config"), o.optString("protocol", "SS"), o.optString("server"), o.optInt("port", 443), o.optString("remark", "Canada"), -1, i + 1))
+                    vlessList.add(ServerItem(o.optString("config"), o.optString("protocol", "VLESS"), o.optString("server"), o.optInt("port", 443), o.optString("remark", "V2Ray"), -1, i + 1))
                 }
 
                 runOnUiThread {
-                    statusDescText.text = "مخزن بروز است. سرورها آماده تست و اتصال می‌باشند."
+                    statusDescText.text = "مخازن سه‌گانه آماده هستند (سرورها تست نشده)"
                     updateStatsCounters()
                     renderCardsList()
                 }
             } catch (e: Exception) {
                 runOnUiThread {
-                    statusDescText.text = "خطا در اتصال به هاست: " + (e.message ?: "تایم‌اوت")
+                    statusDescText.text = "خطا در دریافت اطلاعات: " + (e.message ?: "تایم‌اوت")
                 }
             }
         }
@@ -388,43 +410,58 @@ class MainActivity : Activity() {
     }
 
     private fun updateStatsCounters() {
-        if (activeTab == 0) {
-            countTotalVal.text = allProxies.size.toString()
-            val healthy = allProxies.count { it.ping > 0 }
-            countHealthyVal.text = healthy.toString()
-            val best = allProxies.filter { it.ping > 0 }.minByOrNull { it.ping }
-            countBestVal.text = if (best != null) "${best.ping}ms" else "---"
-        } else {
-            countTotalVal.text = allV2rays.size.toString()
-            val healthy = allV2rays.count { it.ping > 0 }
-            countHealthyVal.text = healthy.toString()
-            val best = allV2rays.filter { it.ping > 0 }.minByOrNull { it.ping }
-            countBestVal.text = if (best != null) "${best.ping}ms" else "---"
+        when (activeTab) {
+            0 -> {
+                countTotalVal.text = proxyList.size.toString()
+                countHealthyVal.text = proxyList.count { it.ping > 0 }.toString()
+                val best = proxyList.filter { it.ping > 0 }.minByOrNull { it.ping }
+                countBestVal.text = if (best != null) "${best.ping}ms" else "---"
+            }
+            1 -> {
+                countTotalVal.text = ssList.size.toString()
+                countHealthyVal.text = ssList.count { it.ping > 0 }.toString()
+                val best = ssList.filter { it.ping > 0 }.minByOrNull { it.ping }
+                countBestVal.text = if (best != null) "${best.ping}ms" else "---"
+            }
+            2 -> {
+                countTotalVal.text = vlessList.size.toString()
+                countHealthyVal.text = vlessList.count { it.ping > 0 }.toString()
+                val best = vlessList.filter { it.ping > 0 }.minByOrNull { it.ping }
+                countBestVal.text = if (best != null) "${best.ping}ms" else "---"
+            }
         }
     }
 
-    // ================= رندر مستقیم لیست آیتم‌ها =================
+    // ================= رندر لیست کارت‌ها =================
     private fun renderCardsList() {
         contentListLayout.removeAllViews()
 
-        val bestPing = if (activeTab == 0) {
-            allProxies.filter { it.ping > 0 }.minByOrNull { it.ping }?.ping ?: -1
-        } else {
-            allV2rays.filter { it.ping > 0 }.minByOrNull { it.ping }?.ping ?: -1
-        }
-
-        if (activeTab == 0) {
-            for (i in allProxies.indices) {
-                val card = buildProxyCard(allProxies[i], allProxies[i].ping == bestPing && bestPing > 0)
-                contentListLayout.addView(card)
-                animateEntrance(card, i)
+        when (activeTab) {
+            0 -> {
+                val bestPing = proxyList.filter { it.ping > 0 }.minByOrNull { it.ping }?.ping ?: -1
+                for (i in proxyList.indices) {
+                    val card = buildProxyCard(proxyList[i], proxyList[i].ping == bestPing && bestPing > 0)
+                    contentListLayout.addView(card)
+                    animateEntrance(card, i)
+                }
             }
-        } else {
-            val count = Math.min(allV2rays.size, 100)
-            for (i in 0 until count) {
-                val card = buildV2rayCard(allV2rays[i], allV2rays[i].ping == bestPing && bestPing > 0)
-                contentListLayout.addView(card)
-                animateEntrance(card, i)
+            1 -> {
+                val bestPing = ssList.filter { it.ping > 0 }.minByOrNull { it.ping }?.ping ?: -1
+                val limit = Math.min(ssList.size, 100)
+                for (i in 0 until limit) {
+                    val card = buildServerCard(ssList[i], ssList[i].ping == bestPing && bestPing > 0, ACC_PURPLE, "کپی کانفیگ شادوساکس")
+                    contentListLayout.addView(card)
+                    animateEntrance(card, i)
+                }
+            }
+            2 -> {
+                val bestPing = vlessList.filter { it.ping > 0 }.minByOrNull { it.ping }?.ping ?: -1
+                val limit = Math.min(vlessList.size, 100)
+                for (i in 0 until limit) {
+                    val card = buildServerCard(vlessList[i], vlessList[i].ping == bestPing && bestPing > 0, ACC_AMBER, "کپی کانفیگ V2Ray (${vlessList[i].protocol})")
+                    contentListLayout.addView(card)
+                    animateEntrance(card, i)
+                }
             }
         }
     }
@@ -483,7 +520,6 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
         }
-
         val pingBadge = TextView(this).apply {
             text = getPingText(item.ping, isBest)
             setTextColor(Color.parseColor(getPingColor(item.ping)))
@@ -492,7 +528,6 @@ class MainActivity : Activity() {
             background = createShape(CARD_SURFACE_SEC, getPingColor(item.ping), dp(20), 1)
             setPadding(dp(9), dp(3), dp(9), dp(3))
         }
-
         val signalBar = createSignalBar(item.ping)
         statusCol.addView(pingBadge)
         statusCol.addView(signalBar)
@@ -509,13 +544,12 @@ class MainActivity : Activity() {
             setPadding(0, dp(10), 0, 0)
             weightSum = 2f
         }
-
         val connBtn = Button(this).apply {
             text = "اتصال به تلگرام"
             setTextColor(Color.parseColor("#04050A"))
             textSize = 12f
             typeface = Typeface.DEFAULT_BOLD
-            background = createGradient(ACC_CYAN, ACC_BLUE, dp(12), 0, "")
+            background = createGradient(ACC_CYAN, "#3B82F6", dp(12), 0, "")
             layoutParams = LinearLayout.LayoutParams(0, dp(42), 1.25f).apply { setMargins(0, 0, dp(8), 0) }
             setOnClickListener {
                 animateClick(this)
@@ -526,7 +560,6 @@ class MainActivity : Activity() {
                 }
             }
         }
-
         val copyBtn = Button(this).apply {
             text = "کپی لینک"
             setTextColor(Color.parseColor(TXT_SEC))
@@ -535,10 +568,9 @@ class MainActivity : Activity() {
             layoutParams = LinearLayout.LayoutParams(0, dp(42), 0.75f)
             setOnClickListener {
                 animateClick(this)
-                copyToClipboard(item.tgLink, "لینک پروکسی تلگرام کپی شد")
+                copyToClipboard(item.tgLink, "لینک پروکسی کپی شد")
             }
         }
-
         btnRow.addView(connBtn)
         btnRow.addView(copyBtn)
         card.addView(btnRow)
@@ -546,12 +578,12 @@ class MainActivity : Activity() {
         return card
     }
 
-    private fun buildV2rayCard(item: V2rayItem, isBest: Boolean): View {
+    private fun buildServerCard(item: ServerItem, isBest: Boolean, accentTheme: String, copyTitle: String): View {
         val isDead = item.ping == -2
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            val borderColor = if (isBest) ACC_PURPLE else if (item.ping > 0) STROKE_BRIGHT else if (isDead) STAT_DEAD else STROKE_PRI
-            val bgCol = if (isBest) "#181026" else CARD_SURFACE
+            val borderColor = if (isBest) accentTheme else if (item.ping > 0) STROKE_BRIGHT else if (isDead) STAT_DEAD else STROKE_PRI
+            val bgCol = if (isBest) "#161322" else CARD_SURFACE
             background = createShape(bgCol, borderColor, dp(20), 1)
             setPadding(dp(16), dp(14), dp(16), dp(14))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply {
@@ -601,7 +633,6 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
         }
-
         val pingBadge = TextView(this).apply {
             text = getPingText(item.ping, isBest)
             setTextColor(Color.parseColor(getPingColor(item.ping)))
@@ -610,7 +641,6 @@ class MainActivity : Activity() {
             background = createShape(CARD_SURFACE_SEC, getPingColor(item.ping), dp(20), 1)
             setPadding(dp(9), dp(3), dp(9), dp(3))
         }
-
         val signalBar = createSignalBar(item.ping)
         statusCol.addView(pingBadge)
         statusCol.addView(signalBar)
@@ -631,15 +661,19 @@ class MainActivity : Activity() {
         card.addView(tagsRow)
 
         val copyBtn = Button(this).apply {
-            text = "کپی کانفیگ شادوساکس"
-            setTextColor(Color.WHITE)
+            text = copyTitle
+            setTextColor(Color.parseColor("#04050A"))
             textSize = 12f
             typeface = Typeface.DEFAULT_BOLD
-            background = createGradient(ACC_PURPLE, ACC_PINK, dp(12), 0, "")
+            background = if (accentTheme == ACC_PURPLE) {
+                createGradient(ACC_PURPLE, "#EC4899", dp(12), 0, "")
+            } else {
+                createGradient(ACC_AMBER, "#EF4444", dp(12), 0, "")
+            }
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(42))
             setOnClickListener {
                 animateClick(this)
-                copyToClipboard(item.config, "کانفیگ شادوساکس کپی شد")
+                copyToClipboard(item.config, "کانفیگ کپی شد")
             }
         }
         card.addView(copyBtn)
@@ -701,7 +735,7 @@ class MainActivity : Activity() {
         }
     }
 
-    // ================= تست پینگ هوشمند =================
+    // ================= موتور تست پینگ دقیق =================
     private fun executeSmartPingTest() {
         actionBtn.isEnabled = false
         actionBtn.alpha = 0.65f
@@ -711,31 +745,36 @@ class MainActivity : Activity() {
         val executor = Executors.newFixedThreadPool(14)
 
         thread {
-            if (activeTab == 0) {
-                for (item in allProxies) {
-                    executor.execute {
-                        item.ping = probeTelegramPing(item.server, item.port)
+            when (activeTab) {
+                0 -> {
+                    for (item in proxyList) {
+                        executor.execute { item.ping = probeTelegramPing(item.server, item.port) }
                     }
                 }
-            } else {
-                val limit = Math.min(allV2rays.size, 100)
-                for (i in 0 until limit) {
-                    val item = allV2rays[i]
-                    executor.execute {
-                        item.ping = linuxIcmpPing(item.server)
+                1 -> {
+                    val limit = Math.min(ssList.size, 100)
+                    for (i in 0 until limit) {
+                        val item = ssList[i]
+                        executor.execute { item.ping = linuxIcmpPing(item.server) }
+                    }
+                }
+                2 -> {
+                    val limit = Math.min(vlessList.size, 100)
+                    for (i in 0 until limit) {
+                        val item = vlessList[i]
+                        executor.execute { item.ping = linuxIcmpPing(item.server) }
                     }
                 }
             }
 
             executor.shutdown()
-            while (!executor.isTerminated) {
-                Thread.sleep(60)
-            }
+            while (!executor.isTerminated) { Thread.sleep(60) }
 
-            if (activeTab == 0) {
-                allProxies.sortBy { if (it.ping <= 0) 999999 else it.ping }
-            } else {
-                allV2rays.sortBy { if (it.ping <= 0) 999999 else it.ping }
+            // مرتب‌سازی
+            when (activeTab) {
+                0 -> proxyList.sortBy { if (it.ping <= 0) 999999 else it.ping }
+                1 -> ssList.sortBy { if (it.ping <= 0) 999999 else it.ping }
+                2 -> vlessList.sortBy { if (it.ping <= 0) 999999 else it.ping }
             }
 
             runOnUiThread {
@@ -843,7 +882,7 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun createGradient(startCol: String, endCol: String, radius: Int, strokeWidth: Int, strokeCol: String): GradientDrawable {
+    private fun createGradient(startCol: String, endCol: String, radius: Int, strokeWidth: Int, strokeCol: String = ""): GradientDrawable {
         return GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(Color.parseColor(startCol), Color.parseColor(endCol))).apply {
             if (strokeWidth > 0 && strokeCol.isNotEmpty()) setStroke(strokeWidth, Color.parseColor(strokeCol))
             cornerRadius = radius.toFloat()
