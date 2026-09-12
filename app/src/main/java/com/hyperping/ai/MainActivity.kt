@@ -9,20 +9,15 @@ import android.graphics.Color
 import android.graphics.LinearGradient
 import android.graphics.Shader
 import android.graphics.Typeface
-import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.LayerDrawable
-import android.graphics.drawable.RippleDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.text.TextUtils
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.View
-import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.AlphaAnimation
 import android.view.animation.Animation
-import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import android.widget.*
 import org.json.JSONArray
@@ -41,17 +36,18 @@ class MainActivity : Activity() {
     private val SS_URL    = "https://p.sosiss.ir/data_ss.json"
     private val VLESS_URL = "https://p.sosiss.ir/data_vless.json"
 
-    // پالت لوکس Aurora Dark
-    private val BG_DEEP     = "#05060E"
-    private val BG_HEADER   = "#0A0E1C"
-    private val SURFACE     = "#0C1120"
-    private val SURFACE_HI  = "#141B31"
-    private val SURFACE_LO  = "#090C18"
-    private val STROKE_SOFT = "#1C2439"
-    private val STROKE_HI   = "#2B3550"
-    private val TXT_BRIGHT  = "#F5F8FF"
-    private val TXT_BODY    = "#98A5C3"
-    private val TXT_DIM     = "#5C6884"
+    // پالت لوکس Aurora Dark (تمام متغیرها تعریف شده)
+    private val BG_DEEP       = "#05060E"
+    private val BG_HEADER     = "#0A0E1C"
+    private val SURFACE       = "#0C1120"
+    private val SURFACE_HI    = "#141B31"
+    private val SURFACE_LO    = "#090C18"
+    private val STROKE_SOFT   = "#1C2439"
+    private val STROKE_HI     = "#2B3550"
+    private val STROKE_BRIGHT = "#2B3550" // فیکس خطای STROKE_BRIGHT
+    private val TXT_BRIGHT    = "#F5F8FF"
+    private val TXT_BODY      = "#98A5C3"
+    private val TXT_DIM       = "#5C6884"
 
     // لهجه‌ها
     private val ACC_CYAN   = "#22D3EE"
@@ -247,7 +243,6 @@ class MainActivity : Activity() {
         }
         actionCard.addView(statusDescText)
 
-        // دکمه اول: پینگ گرفتن
         pingActionBtn = Button(this).apply {
             text = "⚡  تست و اعتبارسنجی دقیق پینگ"
             textSize = 13f
@@ -262,7 +257,6 @@ class MainActivity : Activity() {
         }
         actionCard.addView(pingActionBtn)
 
-        // دکمه دوم (جدید): تست سرعت دانلود و اتصال به پرسرعت‌ترین
         speedActionBtn = Button(this).apply {
             text = "🚀  سنجش سرعت دانلود سرورهای سالم و اتصال"
             textSize = 12f
@@ -336,9 +330,8 @@ class MainActivity : Activity() {
         progressFill.background = createGradient(a, b, dp(3))
         countBestVal.setTextColor(Color.parseColor(a))
 
-        // تنظیم استایل دکمه سرعت
         if (activeTab == 0) {
-            speedActionBtn.visibility = View.GONE // برای پروکسی نیازی نیست
+            speedActionBtn.visibility = View.GONE
         } else {
             speedActionBtn.visibility = View.VISIBLE
             speedActionBtn.background = if (activeTab == 1) {
@@ -405,7 +398,6 @@ class MainActivity : Activity() {
         countBestVal.text = if (bestPing > 0) "${bestPing}ms" else "---"
     }
 
-    // ================= دریافت از هاست =================
     private fun fetchCloudRepositories() {
         thread {
             try {
@@ -458,7 +450,6 @@ class MainActivity : Activity() {
         return b.toString()
     }
 
-    // ================= رندر لیست =================
     private fun renderCardsList() {
         contentListLayout.removeAllViews()
 
@@ -571,7 +562,7 @@ class MainActivity : Activity() {
             text = "کپی لینک"
             setTextColor(Color.parseColor(TXT_BODY))
             textSize = 11f
-            background = createShape(SURFACE_HI, STROKE_HI, dp(12), 1)
+            background = createShape(SURFACE_HI, STROKE_BRIGHT, dp(12), 1)
             layoutParams = LinearLayout.LayoutParams(0, dp(40), 0.75f)
             setOnClickListener {
                 tapFx(this)
@@ -634,7 +625,6 @@ class MainActivity : Activity() {
         infoCol.addView(remarkText)
         infoCol.addView(ipPortText)
 
-        // بج پینگ + سرعت
         val statusCol = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
@@ -755,7 +745,6 @@ class MainActivity : Activity() {
         thread {
             for (item in targets) {
                 executor.execute {
-                    // سنجش نرخ انتقال بایت بر زمان (Throughput Probe)
                     val speed = testThroughputSpeed(item.server, item.port, item.ping)
                     item.speed = speed
                     item.speedText = "⚡ ${String.format("%.1f", speed)} MB/s"
@@ -765,7 +754,6 @@ class MainActivity : Activity() {
             executor.shutdown()
             while (!executor.isTerminated) { Thread.sleep(50) }
 
-            // مرتب‌سازی بر اساس بیشترین سرعت دانلود
             if (activeTab == 1) {
                 ssList.sortByDescending { it.speed }
             } else {
@@ -779,7 +767,6 @@ class MainActivity : Activity() {
                 statusDescText.text = "سنجش سرعت پایان یافت! سریع‌ترین سرور در رتبه ۱ قرار گرفت 🏆"
                 renderCardsList()
 
-                // کپی خودکار و اعلان پرسرعت‌ترین سرور
                 val fastest = if (activeTab == 1) ssList.firstOrNull { it.speed > 0f } else vlessList.firstOrNull { it.speed > 0f }
                 if (fastest != null) {
                     copyToClipboard(fastest.config, "🚀 پرسرعت‌ترین سرور شناسایی و کپی شد (${fastest.speedText})")
@@ -788,7 +775,6 @@ class MainActivity : Activity() {
         }
     }
 
-    // محاسبه سرعت واقعی دانلود بر حسب مگابایت بر ثانیه
     private fun testThroughputSpeed(host: String, port: Int, basePing: Int): Float {
         return try {
             val sock = Socket()
@@ -797,14 +783,12 @@ class MainActivity : Activity() {
             val start = System.currentTimeMillis()
             sock.connect(InetSocketAddress(host, port), 1200)
 
-            // انتقال یک بسته پروب برای سنجش پایداری سوکت
             val out = sock.getOutputStream()
             out.write(ByteArray(512) { 1 })
             out.flush()
             val totalTime = (System.currentTimeMillis() - start).coerceAtLeast(10)
             sock.close()
 
-            // تخمین دقیق پهنای باند BDP
             val rawSpeed = (1400f / (basePing + totalTime * 0.5f)) * 0.35f
             val boundedSpeed = rawSpeed.coerceIn(0.4f, 8.5f)
             (Math.round(boundedSpeed * 10.0) / 10.0).toFloat()
@@ -881,7 +865,6 @@ class MainActivity : Activity() {
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
     }
 
-    // کارخانه ترسیم
     private fun withAlpha(hex: String, alpha: Int): Int {
         val c = Color.parseColor(hex)
         return Color.argb(alpha.coerceIn(0, 255), Color.red(c), Color.green(c), Color.blue(c))
@@ -890,7 +873,9 @@ class MainActivity : Activity() {
     private fun resolveColor(c: Any): Int {
         return when (c) {
             is Int -> c
-            is String -> if (c.isNotEmpty()) Color.parseColor(c) else Color.TRANSPARENT
+            is String -> if (c.isNotEmpty()) {
+                try { Color.parseColor(c) } catch (e: Exception) { Color.TRANSPARENT }
+            } else Color.TRANSPARENT
             else -> Color.TRANSPARENT
         }
     }
@@ -903,9 +888,13 @@ class MainActivity : Activity() {
         }
     }
 
+    // فیکس قطعی خطای isNotEmpty و ارورهای خط 75 لاگ
     private fun createGradient(startCol: Any, endCol: Any, radius: Int, strokeWidth: Int = 0, strokeCol: Any = ""): GradientDrawable {
         return GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(resolveColor(startCol), resolveColor(endCol))).apply {
-            if (strokeWidth > 0 && strokeCol.isNotEmpty()) setStroke(strokeWidth, resolveColor(strokeCol))
+            val sc = resolveColor(strokeCol)
+            if (strokeWidth > 0 && sc != Color.TRANSPARENT) {
+                setStroke(strokeWidth, sc)
+            }
             cornerRadius = radius.toFloat()
         }
     }
