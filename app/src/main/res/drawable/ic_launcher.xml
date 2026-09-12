@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- پس‌زمینه مربعی تیره با گوشه‌های نرم -->
+    <path
+        android:fillColor="#080B14"
+        android:pathData="M18,0 L90,0 A18,18 0 0 1 108,18 L108,90 A18,18 0 0 1 90,108 L18,108 A18,18 0 0 1 0,90 L0,18 A18,18 0 0 1 18,0 Z" />
+
+    <!-- دایره بیرونی با استروک فیروزه‌ای -->
+    <path
+        android:strokeColor="#22D3EE"
+        android:strokeWidth="2.5"
+        android:fillColor="#0E1220"
+        android:pathData="M54,16 A38,38 0 1,1 53.99,16 Z" />
+
+    <!-- سپر بنفش متالیک در مرکز -->
+    <path
+        android:fillColor="#A855F7"
+        android:pathData="M54,26 L76,36 L76,58 C76,72 54,82 54,82 C54,82 32,72 32,58 L32,36 Z" />
+
+    <!-- صاعقه طلایی/سایان نئونی -->
+    <path
+        android:fillColor="#22D3EE"
+        android:pathData="M56,36 L42,54 L52,54 L48,72 L66,50 L56,50 Z" />
+</vector>
