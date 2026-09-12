@@ -127,7 +127,7 @@ class MainActivity : Activity() {
         }
         val titleCol = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val appName = TextView(this).apply {
-            text = "HYPER CORE"
+            text = "AURAX"
             textSize = 17f
             typeface = Typeface.DEFAULT_BOLD
             post {
