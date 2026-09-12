@@ -146,9 +146,9 @@ class MainActivity : Activity() {
             layoutDirection = View.LAYOUT_DIRECTION_LTR
         }
 
-        // لوگو با هاله‌ی تپنده
+        // لوگو با هاله‌ی تپنده (اصلاح به RADIAL_GRADIENT)
         val logoGlow = GradientDrawable().apply {
-            gradientType = GradientDrawable.RADIAL
+            gradientType = GradientDrawable.RADIAL_GRADIENT
             colors = intArrayOf(withAlpha(ACC_CYAN, 110), Color.TRANSPARENT)
             gradientRadius = dp(30).toFloat()
         }
@@ -171,7 +171,6 @@ class MainActivity : Activity() {
             textSize = 17f
             typeface = Typeface.DEFAULT_BOLD
             letterSpacing = 0.06f
-            // گرادیان متنی لوکس
             post {
                 val w = paint.measureText(text.toString())
                 paint.shader = LinearGradient(
@@ -303,7 +302,7 @@ class MainActivity : Activity() {
         countBestVal    = statColumn(statsRow, "بهترین پینگ", "---", ACC_CYAN)
         actionCard.addView(statsRow)
 
-        // نوار پیشرفت نامعین با حرکت پیوسته
+        // نوار پیشرفت نامعین
         progressTrack = FrameLayout(this).apply {
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, dp(5)).apply {
                 setMargins(0, dp(2), 0, dp(12))
@@ -337,7 +336,7 @@ class MainActivity : Activity() {
         }
         actionCard.addView(statusDescText)
 
-        // دکمه‌ی CTA با هاله‌ی تنفسی + برق عبوری
+        // دکمه‌ی CTA
         val ctaWrap = FrameLayout(this).apply {
             clipChildren = false
             clipToPadding = false
@@ -763,7 +762,6 @@ class MainActivity : Activity() {
         }
         card.background = RippleDrawable(ColorStateList.valueOf(withAlpha(ACC_CYAN, 40)), bg, null)
 
-        // ردیف بالا
         val topRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -824,7 +822,6 @@ class MainActivity : Activity() {
         card.addView(topRow)
         card.addView(createDivider())
 
-        // دکمه‌ها
         val btnRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             weightSum = 2f
@@ -1001,7 +998,7 @@ class MainActivity : Activity() {
                     setMargins(dp(1), 0, dp(1), 0)
                 }
                 background = createShape(col, col, dp(2), 0)
-                pivotY = hPx.toFloat()   // رشد از پایین
+                pivotY = hPx.toFloat()
                 scaleY = 0f
                 postDelayed({
                     animate().scaleY(1f).setDuration(300).setInterpolator(DecelerateInterpolator()).start()
@@ -1163,7 +1160,7 @@ class MainActivity : Activity() {
 
     // ═══════════════════════ انیمیشن‌ها ═══════════════════════
 
-    /** هاله‌های شفق پس‌زمینه */
+    /** هاله‌های شفق پس‌زمینه (اصلاح به RADIAL_GRADIENT) */
     private fun auroraBlob(color: String, sizeDp: Int, ml: Int, mt: Int, mr: Int, mb: Int, alpha: Int, period: Long): View {
         val s = dp(sizeDp)
         val v = View(this)
@@ -1172,14 +1169,13 @@ class MainActivity : Activity() {
             GradientDrawable.Orientation.TL_BR,
             intArrayOf(withAlpha(color, alpha), Color.TRANSPARENT)
         ).apply {
-            gradientType = GradientDrawable.RADIAL
+            gradientType = GradientDrawable.RADIAL_GRADIENT
             gradientRadius = s * 0.8f
         }
         breathe(v, 0.55f, 1f, period)
         return v
     }
 
-    /** تنفس آرام آلفا — برای نورها */
     private fun breathe(view: View, from: Float, to: Float, period: Long) {
         view.alpha = from
         ValueAnimator.ofFloat(from, to).apply {
@@ -1192,7 +1188,6 @@ class MainActivity : Activity() {
         }
     }
 
-    /** تپش ملایم مقیاس — برای لوگو */
     private fun pulseScale(view: View, max: Float, period: Long) {
         ValueAnimator.ofFloat(1f, max).apply {
             duration = period
@@ -1208,7 +1203,6 @@ class MainActivity : Activity() {
         }
     }
 
-    /** برق عبوری بی‌پایان روی سطح‌های درخشان */
     private fun loopShine(shine: View) {
         shine.post {
             val host = shine.parent as? View ?: return@post
@@ -1225,7 +1219,6 @@ class MainActivity : Activity() {
         }
     }
 
-    /** ورود سینمایی کارت‌ها */
     private fun animateEntrance(view: View, index: Int) {
         view.alpha = 0f
         view.translationY = dp(26).toFloat()
@@ -1242,7 +1235,6 @@ class MainActivity : Activity() {
             .start()
     }
 
-    /** فشردن فنری + بازخورد لمسی */
     private fun tapFx(view: View) {
         view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
         view.animate().scaleX(0.95f).scaleY(0.95f).setDuration(60).withEndAction {
@@ -1251,7 +1243,6 @@ class MainActivity : Activity() {
         }.start()
     }
 
-    /** شیمر اسکلتون‌ها */
     private fun startShimmer(view: View, delay: Long = 0) {
         view.startAnimation(AlphaAnimation(0.35f, 0.9f).apply {
             duration = 850
@@ -1356,27 +1347,36 @@ class MainActivity : Activity() {
         }
     }
 
-    // ─────────── کارخانه‌ی ترسیم ───────────
+    // ─────────── کارخانه‌ی ترسیم هوشمند و بدون ارور Type Mismatch ───────────
 
     private fun withAlpha(hex: String, alpha: Int): Int {
         val c = Color.parseColor(hex)
         return Color.argb(alpha.coerceIn(0, 255), Color.red(c), Color.green(c), Color.blue(c))
     }
 
-    private fun createShape(bgColor: String, strokeColor: String, radius: Int, strokeWidth: Int): GradientDrawable {
+    // متد هوشمند برای پذیرش همزمان String و Int بدون خطای کاتلین
+    private fun resolveColor(c: Any): Int {
+        return when (c) {
+            is Int -> c
+            is String -> if (c.isNotEmpty()) Color.parseColor(c) else Color.TRANSPARENT
+            else -> Color.TRANSPARENT
+        }
+    }
+
+    private fun createShape(bgColor: Any, strokeColor: Any, radius: Int, strokeWidth: Int): GradientDrawable {
         return GradientDrawable().apply {
-            setColor(Color.parseColor(bgColor))
-            if (strokeWidth > 0) setStroke(strokeWidth, Color.parseColor(strokeColor))
+            setColor(resolveColor(bgColor))
+            if (strokeWidth > 0) setStroke(strokeWidth, resolveColor(strokeColor))
             cornerRadius = radius.toFloat()
         }
     }
 
-    private fun createGradient(startCol: String, endCol: String, radius: Int, strokeWidth: Int = 0, strokeCol: String = ""): GradientDrawable {
+    private fun createGradient(startCol: Any, endCol: Any, radius: Int, strokeWidth: Int = 0, strokeCol: Any = ""): GradientDrawable {
         return GradientDrawable(
             GradientDrawable.Orientation.LEFT_RIGHT,
-            intArrayOf(Color.parseColor(startCol), Color.parseColor(endCol))
+            intArrayOf(resolveColor(startCol), resolveColor(endCol))
         ).apply {
-            if (strokeWidth > 0 && strokeCol.isNotEmpty()) setStroke(strokeWidth, Color.parseColor(strokeCol))
+            if (strokeWidth > 0) setStroke(strokeWidth, resolveColor(strokeCol))
             cornerRadius = radius.toFloat()
         }
     }
@@ -1400,9 +1400,9 @@ class MainActivity : Activity() {
         }
     }
 
-    /** هاله‌ی رادیال پشت دکمه‌ی CTA */
+    /** هاله‌ی رادیال پشت دکمه‌ی CTA (اصلاح به RADIAL_GRADIENT) */
     private fun glowBackdrop(accent: String): GradientDrawable = GradientDrawable().apply {
-        gradientType = GradientDrawable.RADIAL
+        gradientType = GradientDrawable.RADIAL_GRADIENT
         colors = intArrayOf(withAlpha(accent, 90), Color.TRANSPARENT)
         gradientRadius = dp(130).toFloat()
     }
